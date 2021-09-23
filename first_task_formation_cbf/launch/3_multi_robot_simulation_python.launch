@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="use_sim_time" default="true" />
+  <arg name="gui" default="true" />
+  <arg name="headless" default="false" />
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="debug" value="0" />
+    <arg name="gui" value="$(arg gui)" />
+    <arg name="use_sim_time" value="$(arg use_sim_time)" />
+    <arg name="headless" value="$(arg headless)" />
+    <arg name="paused" value="false"/>
+  </include>
+
+  <group ns="nexus1">
+    <!-- Load robot description -->
+    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
+    <!-- Spawn the robot -->
+    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
+      args="-urdf -model nexus1 -param robot_description -x 0 -y 0 -z 0.5" />
+      <!-- Controller node -->
+    <node name="back_and_forth_controller" pkg="sml_nexus_tutorials" type="back_and_forth_controller.py" output="screen" />
+  </group>
+
+  <!-- Nexus 2  -->
+  <group ns="nexus2">
+    <!-- Load robot description -->
+    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
+    <!-- Spawn the robot -->
+    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
+      args="-urdf -model nexus2 -param robot_description -x 0 -y -2 -z 0.5" />
+    <!-- Follower controller node -->
+    <node name="follower_controller" pkg="sml_nexus_tutorials" type="follower_controller.py" output="screen" >
+      <param name="robot_name" value="nexus2"/>
+      <param name="tracked_object" value="nexus1"/>
+      <rosparam param="tracking_offset">[0, -1, 0]</rosparam>
+    </node>
+  </group>
+
+  <!-- Nexus 3  -->
+  <group ns="nexus3">
+    <!-- Load robot description -->
+    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
+    <!-- Spawn the robot -->
+    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
+      args="-urdf -model nexus3 -param robot_description -x -1 -y 2 -z 0.5" />
+    <!-- Follower controller node -->
+    <node name="follower_controller" pkg="sml_nexus_tutorials" type="follower_controller.py" output="screen" >
+      <param name="robot_name" value="nexus3"/>
+      <param name="tracked_object" value="nexus1"/>
+      <rosparam param="tracking_offset">[0, 1, 0]</rosparam>
+    </node>
+  </group>
+
+  <!-- Motion capture system simulation -->
+  <include file="$(find mocap_simulator)/launch/qualisys_simulator.launch" />
+
+</launch>
