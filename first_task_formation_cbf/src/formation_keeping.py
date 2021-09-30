@@ -39,23 +39,18 @@ class CBFFormationController():
         #Get robot number from the name (works for numbers>9)
         robot_number = int("".join(map(str, [int(i) for i in list(robot_name) if i.isdigit()])))
 
-        #Get tracked neighbour names from parameters
+        #Get neighbour numbers from parameters
         neighbours = rospy.get_param('~neighbours')
-        Ni = [i for i in neighbours if i]
-
-        #Get number of neighbours and total number of agents
-        number_neighbours = rospy.get_param('~number_neighbours')
-        num_neighbours = number_neighbours[0]
-        num_agents = number_neighbours[1]
+        number_neighbours = len(neighbours)
 
         #Get the ideal positions of the formation
-        formation_positions = rospy.get_param('~formation_positions')
+        formation_positions = rospy.get_param('/formation_positions')
 
         #Get parameter representing communication maintenance or collision avoidance
-        cbf_direction = rospy.get_param('~cbf_direction')
+        cbf_direction = rospy.get_param('/cbf_direction')
 
         #Maximum safe distance for CBF
-        safe_distance = rospy.get_param('~safe_distance')
+        safe_distance = rospy.get_param('/safe_distance')
 
         #Controller gains (for x, y, heading)
         gains = (1, 1, 1)
@@ -63,30 +58,35 @@ class CBFFormationController():
         #Init robot pose
         self.robot_pose = geometry_msgs.msg.PoseStamped()
 
-        #Init neighbouring pose
-        self.neighbour_pose = geometry_msgs.msg.PoseStamped()
-
         #Init last received pose time
         self.last_received_robot_pose = rospy.Time()
 
+        #Init neighbouring pose
+        self.neighbour_pose = []
+
         #Init last received pose time
-        self.last_received_neighbour = rospy.Time()
+        self.last_received_neighbour_pose = []
+
+        for i in neighbours:
+            self.neighbour_pose.append(geometry_msgs.msg.PoseStamped())
+            self.last_received_neighbour_pose.append(rospy.Time())
 
         #Timeout in seconds
         timeout = 0.5
 
         #Booleans to check is positions have been received
         init_pose = False
-        init_neighbours = []
         init_neighbour = False
+        init_neighbours = []
+        for i in range(number_neighbours):
+            init_neighbours.append(bool())
 
         #Setup robot pose subscriber
         rospy.Subscriber("/qualisys/"+robot_name+"/pose", geometry_msgs.msg.PoseStamped, self.robot_pose_callback)
 
         #Setup neighbour pose subscriber
-        for i in range(num_neighbours):
-            neighbour_number = int("".join(map(str, [int(j) for j in list(Ni[i]) if j.isdigit()])))
-            rospy.Subscriber("/qualisys/"+Ni[i]+"/pose", geometry_msgs.msg.PoseStamped, self.neighbour_pose_callback, neighbour_number)
+        for i in range(number_neighbours):
+            rospy.Subscriber("/qualisys/nexus"+str(neighbours[i])+"/pose", geometry_msgs.msg.PoseStamped, self.neighbour_pose_callback, i)
 
         #Setup velocity command publisher
         vel_pub = rospy.Publisher("cmd_vel", geometry_msgs.msg.Twist, queue_size=100)
@@ -110,7 +110,7 @@ class CBFFormationController():
         r = rospy.Rate(loop_frequency)
 
         rospy.loginfo("CBF-Formation controller Initialized for "+robot_name+
-                      " with "+str(num_neighbours)+ " neighbours "+str(Ni)+
+                      " with "+str(len(neighbours))+ " neighbours "+str(neighbours)+
                       " with ideal positions "+str(formation_positions)
                       )
         
@@ -118,8 +118,8 @@ class CBFFormationController():
             #Run controller if robot position and neighbours position have been received
             now  = rospy.Time.now()
             init_pose = (now.to_sec() < self.last_received_robot_pose.to_sec() + timeout)
-            for t in range(num_neighbours):
-                init_neighbours[t] = (now.to_sec() < self.last_received_neighbour[t].to_sec() + timeout)
+            for i in range(number_neighbours):
+                init_neighbours[i] = (now.to_sec() < self.last_received_neighbour_pose[i].to_sec() + timeout)
             init_neighbour = max(init_neighbours)
 
             if init_pose and init_neighbour:
@@ -128,12 +128,11 @@ class CBFFormationController():
                 #-----------------------------------
                 error_x = 0
                 error_y = 0
-                for i in range(num_neighbours):
-                    neighbour_number = int("".join(map(str, [int(j) for j in list(Ni[i]) if j.isdigit()])))
-                    error_x += self.neighbour_pose[neighbour_number-1].pose.position.x - self.robot_pose.pose.position.x + \
-                        (formation_positions[robot_number-1][0] - formation_positions[neighbour_number-1][0])
-                    error_y += self.neighbour_pose[neighbour_number-1].pose.position.y - self.robot_pose.pose.position.y  + \
-                        (formation_positions[robot_number-1][1] - formation_positions[neighbour_number-1][1])
+                for i in range(number_neighbours):
+                    error_x += self.neighbour_pose[i].pose.position.x - self.robot_pose.pose.position.x + \
+                        (formation_positions[robot_number-1][0] - formation_positions[neighbours[i]-1][0])
+                    error_y += self.neighbour_pose[i].pose.position.y - self.robot_pose.pose.position.y  + \
+                        (formation_positions[robot_number-1][1] - formation_positions[neighbours[i]-1][1])
 
                 #-----------------------
                 # Compute heading error
@@ -146,12 +145,11 @@ class CBFFormationController():
 
                 #Get euler angle from neighbours pose quaternion
                 error_heading = 0
-                for i in range(num_neighbours):
-                    neighbour_number = int("".join(map(str, [int(j) for j in list(Ni[i]) if j.isdigit()])))
-                    (neighbour_roll, neighbour_pitch, neighbour_yaw) = euler_from_quaternion([self.neighbour_pose[neighbour_number-1].pose.orientation.x,
-                                                                              self.neighbour_pose[neighbour_number-1].pose.orientation.y,
-                                                                              self.neighbour_pose[neighbour_number-1].pose.orientation.z,
-                                                                              self.neighbour_pose[neighbour_number-1].pose.orientation.w])
+                for i in range(number_neighbours):
+                    (neighbour_roll, neighbour_pitch, neighbour_yaw) = euler_from_quaternion([self.neighbour_pose[i].pose.orientation.x,
+                                                                              self.neighbour_pose[i].pose.orientation.y,
+                                                                              self.neighbour_pose[i].pose.orientation.z,
+                                                                              self.neighbour_pose[i].pose.orientation.w])
                     error_heading += neighbour_yaw - yaw
 
                 #----------------
@@ -200,12 +198,12 @@ class CBFFormationController():
     #          Callback function 
     #    for neighbours pose feedback
     #=====================================
-    def neighbour_pose_callback(self, pose_stamped_msg, neighbour_number):
+    def neighbour_pose_callback(self, pose_stamped_msg, i):
         #Save neigbours pose as class variable
-        self.neighbour_pose[neighbour_number-1] = pose_stamped_msg
+        self.neighbour_pose[i] = pose_stamped_msg
 
         #Save when last neighbours pose was received
-        self.last_received_neighbour_pose[neighbour_number-1] = rospy.Time.now()
+        self.last_received_neighbour_pose[i] = rospy.Time.now()
 
 
 #=====================================

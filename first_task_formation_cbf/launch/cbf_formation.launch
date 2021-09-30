@@ -25,12 +25,11 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus1 -param robot_description -x 0 -y 2 -z 0.5" />
+      args="-urdf -model nexus1 -param robot_description -x -2 -y 4 -z 0.5" />
       <!-- Auto node -->
     <node name="cbf_formation_controller" pkg="first_task_formation_cbf" type="formation_keeping.py" output="screen" >
       <param name="robot_name" value="nexus1"/>
-      <param name="neighbours" value=["", "nexus2", "", "", ""]/>
-      <rosparam param="number_neighbours">[1, 5]</rosparam>
+      <rosparam param="neighbours">[2]</rosparam>
     </node>
   </group>
 
@@ -40,12 +39,11 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus2 -param robot_description -x 0 -y 1 -z 0.5" />
+      args="-urdf -model nexus2 -param robot_description -x -2 -y 2 -z 0.5" />
       <!-- Auto node -->
     <node name="cbf_formation_controller" pkg="first_task_formation_cbf" type="formation_keeping.py" output="screen" >
       <param name="robot_name" value="nexus2"/>
-      <param name="neighbours" value=["nexus1", "", "nexus3", "nexus4", "nexus5"]/>
-      <rosparam param="number_neighbours">[4, 5]</rosparam>
+      <rosparam param="neighbours">[1, 3, 4, 5]</rosparam>
     </node>
   </group>
 
@@ -55,12 +53,11 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus3 -param robot_description -x 0 -y 0 -z 0.5" />
+      args="-urdf -model nexus3 -param robot_description -x -3 -y -1 -z 0.5" />
       <!-- Auto node -->
     <node name="cbf_formation_controller" pkg="first_task_formation_cbf" type="formation_keeping.py" output="screen" >
       <param name="robot_name" value="nexus3"/>
-      <param name="neighbours" value=["", "nexus2", "", "", ""]/>
-      <rosparam param="number_neighbours">[1, 5]</rosparam>
+      <rosparam param="neighbours">[2]</rosparam>
     </node>
   </group>
 
@@ -70,12 +67,11 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus4 -param robot_description -x 1 -y 2 -z 0.5" />
+      args="-urdf -model nexus4 -param robot_description -x 3 -y 3 -z 0.5" />
       <!-- Auto node -->
     <node name="cbf_formation_controller" pkg="first_task_formation_cbf" type="formation_keeping.py" output="screen" >
       <param name="robot_name" value="nexus4"/>
-      <param name="neighbours" value=["", "nexus2", "", "", ""]/>
-      <rosparam param="number_neighbours">[1, 5]</rosparam>
+      <rosparam param="neighbours">[2]</rosparam>
     </node>
   </group>
 
@@ -85,12 +81,11 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus5 -param robot_description -x 1 -y 0 -z 0.5" />
+      args="-urdf -model nexus5 -param robot_description -x 5 -y -2 -z 0.5" />
       <!-- Auto node -->
     <node name="cbf_formation_controller" pkg="first_task_formation_cbf" type="formation_keeping.py" output="screen" >
       <param name="robot_name" value="nexus5"/>
-      <param name="neighbours" value=["", "nexus2", "", "", ""]/>
-      <rosparam param="number_neighbours">[1, 5]</rosparam>
+      <rosparam param="neighbours">[2]</rosparam>
     </node>
   </group>
 
