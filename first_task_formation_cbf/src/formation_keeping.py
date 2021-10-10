@@ -13,6 +13,7 @@
 #  keep the communication bw robots or
 #   avoid colliding with other robots
 #=====================================
+from re import U
 import sys
 import rospy
 import copy
@@ -20,6 +21,10 @@ import geometry_msgs.msg
 import tf2_ros
 import tf2_geometry_msgs
 from tf.transformations import euler_from_quaternion
+
+import cvxpy as cp
+import numpy as np
+
 
 class CBFFormationController():
     #=====================================
@@ -46,14 +51,23 @@ class CBFFormationController():
         #Get the ideal positions of the formation
         formation_positions = rospy.get_param('/formation_positions')
 
-        #Get parameter representing communication maintenance or collision avoidance
-        cbf_direction = rospy.get_param('/cbf_direction')
+        #Get parameter representing communication maintenance and/or collision avoidance
+        cbf_cm = rospy.get_param('/cbf_cm')
+        cbf_cm = rospy.get_param('/cbf_oa')
 
-        #Maximum safe distance for CBF
-        safe_distance = rospy.get_param('/safe_distance')
+        #Maximum/minimum safe distance for CBF
+        safe_distance_cm = rospy.get_param('/safe_distance_cm')
+        safe_distance_oa = rospy.get_param('/safe_distance_oa')
 
         #Controller gains (for x, y, heading)
         gains = (1, 1, 1)
+
+        #CBF constraint parameters
+        p = 1000
+        alfa = 1
+
+        #Dimension of control input
+        n = 2
 
         #Init robot pose
         self.robot_pose = geometry_msgs.msg.PoseStamped()
@@ -110,7 +124,7 @@ class CBFFormationController():
         r = rospy.Rate(loop_frequency)
 
         rospy.loginfo("CBF-Formation controller Initialized for "+robot_name+
-                      " with "+str(len(neighbours))+ " neighbours "+str(neighbours)+
+                      " with "+str(len(neighbours))+" neighbours "+str(neighbours)+
                       " with ideal positions "+str(formation_positions)
                       )
         
@@ -120,18 +134,18 @@ class CBFFormationController():
             init_pose = (now.to_sec() < self.last_received_robot_pose.to_sec() + timeout)
             for i in range(number_neighbours):
                 init_neighbours[i] = (now.to_sec() < self.last_received_neighbour_pose[i].to_sec() + timeout)
-            init_neighbour = max(init_neighbours)
+            init_neighbour = all(init_neighbours)
 
             if init_pose and init_neighbour:
                 #-----------------------------------
-                # Compute error on x and y position
+                # Compute nominal (auto) controller
                 #-----------------------------------
-                error_x = 0
-                error_y = 0
+                u_nom_x = 0
+                u_nom_y = 0
                 for i in range(number_neighbours):
-                    error_x += self.neighbour_pose[i].pose.position.x - self.robot_pose.pose.position.x + \
+                    u_nom_x += self.neighbour_pose[i].pose.position.x - self.robot_pose.pose.position.x + \
                         (formation_positions[robot_number-1][0] - formation_positions[neighbours[i]-1][0])
-                    error_y += self.neighbour_pose[i].pose.position.y - self.robot_pose.pose.position.y  + \
+                    u_nom_y += self.neighbour_pose[i].pose.position.y - self.robot_pose.pose.position.y  + \
                         (formation_positions[robot_number-1][1] - formation_positions[neighbours[i]-1][1])
 
                 #-----------------------
@@ -152,12 +166,47 @@ class CBFFormationController():
                                                                               self.neighbour_pose[i].pose.orientation.w])
                     error_heading += neighbour_yaw - yaw
 
+                #----------------------------
+                # Solve minimization problem
+                #----------------------------
+                #Construct a vector for the nominal controller and robot states
+                u_nom = np.array([u_nom_x, u_nom_y])
+                x_i = np.array([self.robot_pose.pose.position.x, self.robot_pose.pose.position.y])
+                
+                '''
+                #Calculate CBF constraint in the form of a*u + b >= 0
+                a = 0
+                b = 0
+                for i in range(number_neighbours):
+                    x_j = np.array([self.neighbour_pose[i].pose.position.x, self.neighbour_pose[i].pose.position.y])
+                    h_L = safe_distance_cm**2 - cp.sum_squares(x_i - x_j)
+                    grad_h_L = -2*cp.norm(x_i - x_j)
+                    a += cp.exp(-p*h_L)*cp.transpose(grad_h_L)
+                    b += alfa*cp.exp(-p*h_L)*h_L
+
+                # Construct the problem
+                u = cp.Variable(n)
+                objective = cp.Minimize(cp.sum_squares(u-u_nom))
+                constraints = [a*u + b >= 0]
+                prob = cp.Problem(objective, constraints)
+
+                # The optimal objective value is returned by `prob.solve()`.
+                result = prob.solve()
+                # The optimal value for u is stored in `u.value`.
+                u_x = u.value[0]
+                u_y = u.value[1]
+                '''
+                u_x = u_nom[0]
+                u_y = u_nom[1]
+
+                u_heading = error_heading
+
                 #----------------
                 # Compute output
                 #----------------
-                vel_cmd_msg.linear.x = error_x * gains[0]
-                vel_cmd_msg.linear.y = error_y * gains[1]
-                vel_cmd_msg.angular.z = error_heading * gains[2]
+                vel_cmd_msg.linear.x = u_x * gains[0]
+                vel_cmd_msg.linear.y = u_y * gains[1]
+                vel_cmd_msg.angular.z = u_heading * gains[2]
 
             #Else stop robot
             else:
@@ -241,5 +290,5 @@ if __name__ == "__main__":
         rospy.logerr(e)
         sys.exit(0)
     except rospy.ROSInterruptException:
-        print "Shutting down"
+        print("Shutting down")
         sys.exit(0)
