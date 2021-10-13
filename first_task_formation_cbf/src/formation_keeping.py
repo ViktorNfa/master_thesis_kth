@@ -22,8 +22,8 @@ import tf2_ros
 import tf2_geometry_msgs
 from tf.transformations import euler_from_quaternion
 
-import cvxpy as cp
 import numpy as np
+from scipy.optimize import minimize, LinearConstraint
 
 
 class CBFFormationController():
@@ -63,7 +63,7 @@ class CBFFormationController():
         gains = (1, 1, 1)
 
         #CBF constraint parameters
-        p = 1000
+        p = 1
         alfa = 1
 
         #Dimension of control input
@@ -173,31 +173,42 @@ class CBFFormationController():
                 u_nom = np.array([u_nom_x, u_nom_y])
                 x_i = np.array([self.robot_pose.pose.position.x, self.robot_pose.pose.position.y])
                 
-                '''
                 #Calculate CBF constraint in the form of a*u + b >= 0
-                a = 0
-                b = 0
+                a_cm = 0
+                a_oa = 0
+                b_cm = 0
+                b_oa = 0
                 for i in range(number_neighbours):
                     x_j = np.array([self.neighbour_pose[i].pose.position.x, self.neighbour_pose[i].pose.position.y])
-                    h_L = safe_distance_cm**2 - cp.sum_squares(x_i - x_j)
-                    grad_h_L = -2*cp.norm(x_i - x_j)
-                    a += cp.exp(-p*h_L)*cp.transpose(grad_h_L)
-                    b += alfa*cp.exp(-p*h_L)*h_L
+                    h_L_cm = safe_distance_cm**2 - np.linalg.norm(x_i - x_j)**2
+                    grad_h_L_cm = -2*np.linalg.norm(x_i - x_j)
+                    a_cm += np.exp(-p*h_L_cm)*np.transpose(grad_h_L_cm)
+                    b_cm += alfa*np.exp(-p*h_L_cm)*h_L_cm
+                    
+                    h_L_oa = np.linalg.norm(x_i - x_j)**2 - safe_distance_oa**2
+                    grad_h_L_oa = 2*np.linalg.norm(x_i - x_j)
+                    a_oa += np.exp(-p*h_L_oa)*np.transpose(grad_h_L_oa)
+                    b_oa += alfa*np.exp(-p*h_L_oa)*h_L_oa
 
+                # Define linear constraints
+                constraint_cm = LinearConstraint(a_cm, lb=-b_cm, ub=np.inf)
+                constraint_oa = LinearConstraint(a_oa, lb=-b_oa, ub=np.inf)
+                
+                # Define objective function
+                def objective_function(u, u_nom):
+                    return np.linalg.norm(u - u_nom)**2
+                
                 # Construct the problem
-                u = cp.Variable(n)
-                objective = cp.Minimize(cp.sum_squares(u-u_nom))
-                constraints = [a*u + b >= 0]
-                prob = cp.Problem(objective, constraints)
+                u = minimize(
+                    objective_function,
+                    x0=u_nom,
+                    args=(u_nom,),
+                    constraints=[constraint_cm, constraint_oa],
+                )
 
-                # The optimal objective value is returned by `prob.solve()`.
-                result = prob.solve()
-                # The optimal value for u is stored in `u.value`.
-                u_x = u.value[0]
-                u_y = u.value[1]
-                '''
-                u_x = u_nom[0]
-                u_y = u_nom[1]
+                # The optimal value for u
+                u_x = u.x[0]
+                u_y = u.x[1]
 
                 u_heading = error_heading
 
