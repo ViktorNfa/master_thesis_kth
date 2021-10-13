@@ -181,12 +181,12 @@ class CBFFormationController():
                 for i in range(number_neighbours):
                     x_j = np.array([self.neighbour_pose[i].pose.position.x, self.neighbour_pose[i].pose.position.y])
                     h_L_cm = safe_distance_cm**2 - np.linalg.norm(x_i - x_j)**2
-                    grad_h_L_cm = -2*np.linalg.norm(x_i - x_j)
+                    grad_h_L_cm = -2*np.transpose(np.array([x_i[0] - x_j[0], x_i[1] - x_j[1]]))
                     a_cm += np.exp(-p*h_L_cm)*np.transpose(grad_h_L_cm)
                     b_cm += alfa*np.exp(-p*h_L_cm)*h_L_cm
                     
                     h_L_oa = np.linalg.norm(x_i - x_j)**2 - safe_distance_oa**2
-                    grad_h_L_oa = 2*np.linalg.norm(x_i - x_j)
+                    grad_h_L_oa = 2*np.transpose(np.array([x_i[0] - x_j[0], x_i[1] - x_j[1]]))
                     a_oa += np.exp(-p*h_L_oa)*np.transpose(grad_h_L_oa)
                     b_oa += alfa*np.exp(-p*h_L_oa)*h_L_oa
 
