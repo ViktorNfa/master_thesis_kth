@@ -2,8 +2,11 @@
 #=====================================
 #       Formation keeping with
 #     communication maintenance
-#       or obstacle avoidance 
+#     and/or obstacle avoidance 
 #      for the SML Nexus robot
+#   done in a decentralized manner
+#        with more than one 
+#         controller node
 #               ----
 #     Listen to both the robot pose 
 #   and the other neighbouring robots 
@@ -53,7 +56,7 @@ class CBFFormationController():
 
         #Get parameter representing communication maintenance and/or collision avoidance
         cbf_cm = rospy.get_param('/cbf_cm')
-        cbf_cm = rospy.get_param('/cbf_oa')
+        cbf_oa = rospy.get_param('/cbf_oa')
 
         #Maximum/minimum safe distance for CBF
         safe_distance_cm = rospy.get_param('/safe_distance_cm')
@@ -63,11 +66,7 @@ class CBFFormationController():
         gains = (1, 1, 1)
 
         #CBF constraint parameters
-        p = 1
         alfa = 1
-
-        #Dimension of control input
-        n = 2
 
         #Init robot pose
         self.robot_pose = geometry_msgs.msg.PoseStamped()
@@ -174,25 +173,28 @@ class CBFFormationController():
                 x_i = np.array([self.robot_pose.pose.position.x, self.robot_pose.pose.position.y])
                 
                 #Calculate CBF constraint in the form of a*u + b >= 0
-                a_cm = 0
-                a_oa = 0
-                b_cm = 0
-                b_oa = 0
+                h_cm = np.zeros((number_neighbours, 1))
+                grad_h_cm = np.zeros((number_neighbours, 2))
+                h_oa = np.zeros((number_neighbours, 1))
+                grad_h_oa = np.zeros((number_neighbours, 2))
                 for i in range(number_neighbours):
                     x_j = np.array([self.neighbour_pose[i].pose.position.x, self.neighbour_pose[i].pose.position.y])
-                    h_L_cm = safe_distance_cm**2 - np.linalg.norm(x_i - x_j)**2
-                    grad_h_L_cm = -2*np.transpose(np.array([x_i[0] - x_j[0], x_i[1] - x_j[1]]))
-                    a_cm += np.exp(-p*h_L_cm)*np.transpose(grad_h_L_cm)
-                    b_cm += alfa*np.exp(-p*h_L_cm)*h_L_cm
-                    
-                    h_L_oa = np.linalg.norm(x_i - x_j)**2 - safe_distance_oa**2
-                    grad_h_L_oa = 2*np.transpose(np.array([x_i[0] - x_j[0], x_i[1] - x_j[1]]))
-                    a_oa += np.exp(-p*h_L_oa)*np.transpose(grad_h_L_oa)
-                    b_oa += alfa*np.exp(-p*h_L_oa)*h_L_oa
+                    h_cm[i] = safe_distance_cm**2 - np.linalg.norm(x_i - x_j)**2
+                    grad_h_cm[i] = -2*np.transpose(np.array([x_i[0] - x_j[0], x_i[1] - x_j[1]]))
+                    h_oa[i] = np.linalg.norm(x_i - x_j)**2 - safe_distance_oa**2
+                    grad_h_oa[i] = 2*np.transpose(np.array([x_i[0] - x_j[0], x_i[1] - x_j[1]]))
+
+                # Comunication maintenance CBF
+                a_cm = grad_h_cm
+                b_cm = alfa*h_cm.reshape(number_neighbours,)
+
+                # Obstacle avoidance CBF
+                a_oa = grad_h_oa
+                b_oa = alfa*h_oa.reshape(number_neighbours,)
 
                 # Define linear constraints
-                constraint_cm = LinearConstraint(a_cm, lb=-b_cm, ub=np.inf)
-                constraint_oa = LinearConstraint(a_oa, lb=-b_oa, ub=np.inf)
+                constraint_cm = LinearConstraint(a_cm*cbf_cm, lb=-b_cm, ub=np.inf)
+                constraint_oa = LinearConstraint(a_oa*cbf_oa, lb=-b_oa, ub=np.inf)
                 
                 # Define objective function
                 def objective_function(u, u_nom):
