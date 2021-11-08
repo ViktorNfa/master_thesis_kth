@@ -47,7 +47,7 @@
       <!-- Auto node -->
     <node name="cbf_formation_controller" pkg="first_task_formation_cbf" type="formation_keeping.py" output="screen" >
       <param name="robot_name" value="nexus2"/>
-      <rosparam param="neighbours">[1, 3, 4, 5]</rosparam>
+      <rosparam param="neighbours">[1, 3, 4, 5, 6]</rosparam>
     </node>
   </group>
 
@@ -75,7 +75,7 @@
       <!-- Auto node -->
     <node name="cbf_formation_controller" pkg="first_task_formation_cbf" type="formation_keeping.py" output="screen" >
       <param name="robot_name" value="nexus4"/>
-      <rosparam param="neighbours">[1, 2]</rosparam>
+      <rosparam param="neighbours">[1, 2, 6]</rosparam>
     </node>
   </group>
 
@@ -89,7 +89,21 @@
       <!-- Auto node -->
     <node name="cbf_formation_controller" pkg="first_task_formation_cbf" type="formation_keeping.py" output="screen" >
       <param name="robot_name" value="nexus5"/>
-      <rosparam param="neighbours">[2, 3]</rosparam>
+      <rosparam param="neighbours">[2, 3, 6]</rosparam>
+    </node>
+  </group>
+
+  <!-- Nexus 6  -->
+  <group ns="nexus6">
+    <!-- Load robot description -->
+    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
+    <!-- Spawn the robot -->
+    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
+      args="-urdf -model nexus6 -param robot_description -x 5 -y -1 -z 0.5" />
+      <!-- Auto node -->
+    <node name="cbf_formation_controller" pkg="first_task_formation_cbf" type="formation_keeping.py" output="screen" >
+      <param name="robot_name" value="nexus6"/>
+      <rosparam param="neighbours">[2, 4, 5]</rosparam>
     </node>
   </group>
 
