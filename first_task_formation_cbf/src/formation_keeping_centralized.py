@@ -15,7 +15,7 @@
 #  keep the communication bw robots or
 #   avoid colliding with other robots
 #=====================================
-from re import U
+from re import I, U
 import sys
 import rospy
 import copy
@@ -50,8 +50,23 @@ class CBFFormationControllerCentralized():
         for i in range(number_robots):
             number_neighbours.append(len(neighbours[i]))
 
+        #Create Laplacian matrix for the graph
+        L_G = np.zeros((number_robots,number_robots))
+        for i in range(number_robots):
+            L_G[i, i] = number_neighbours[i]
+            for j in neighbours[i]:
+                L_G[i, j-1] = -1
+
+        #Create edge list
+        edges = []
+        for i in range(number_robots):
+            for j in neighbours[i]:
+                if (i+1,j) not in edges and (j,i+1) not in edges:
+                    edges.append((i+1,j))
+
         #Get the ideal positions of the formation
         formation_positions = rospy.get_param('/formation_positions')
+        p_d = np.array(formation_positions)
 
         #Get parameter representing communication maintenance and/or collision avoidance
         cbf_cm = rospy.get_param('/cbf_cm')
@@ -60,6 +75,9 @@ class CBFFormationControllerCentralized():
         #Maximum/minimum safe distance for CBF
         safe_distance_cm = rospy.get_param('/safe_distance_cm')
         safe_distance_oa = rospy.get_param('/safe_distance_oa')
+
+        #Dimension of the problem
+        n = 2
 
         #Controller gains (for x, y, heading)
         gains = (1, 1, 1)
@@ -106,7 +124,7 @@ class CBFFormationControllerCentralized():
                 rospy.loginfo("Wait for transform to be available for nexus"+str(robots_number[i]))
                 rospy.sleep(1)
 
-        #Create a ROS Twist message for velocity command
+        #Create a ROS Twist message for velocity command and cbf_output
         vel_cmd_msg = []
         for i in range(number_robots):
             vel_cmd_msg.append(geometry_msgs.msg.Twist())
@@ -129,98 +147,82 @@ class CBFFormationControllerCentralized():
                 init_pose[i] = (now.to_sec() < self.last_received_robot_pose[i].to_sec() + timeout)
 
             if all(init_pose):
-                
-                u_x = []
-                u_y = []
-                u_heading = []
 
+                #--------------------------------------
+                # Get position and orientation matrices
+                #--------------------------------------
+                p = np.zeros((number_robots, 2))
+                heading = np.zeros((number_robots))
                 for i in range(number_robots):
+                    #Get x and y position from robot pose
+                    p[i, 0] = self.robot_pose[i].pose.position.x
+                    p[i, 1] = self.robot_pose[i].pose.position.y
 
-                    #-----------------------------------
-                    # Compute nominal (auto) controllers
-                    #-----------------------------------
-                    u_nom_x = 0
-                    u_nom_y = 0
-                    for j in neighbours[i]:
-                        u_nom_x += self.robot_pose[j-1].pose.position.x - self.robot_pose[i].pose.position.x + \
-                            (formation_positions[i][0] - formation_positions[j-1][0])
-                        u_nom_y += self.robot_pose[j-1].pose.position.y - self.robot_pose[i].pose.position.y  + \
-                            (formation_positions[i][1] - formation_positions[j-1][1])
-
-                    #-----------------------
-                    # Compute heading error
-                    #-----------------------
                     #Get euler angle from robot pose quaternion
                     (roll, pitch, yaw) = euler_from_quaternion([self.robot_pose[i].pose.orientation.x,
                                                                 self.robot_pose[i].pose.orientation.y,
                                                                 self.robot_pose[i].pose.orientation.z,
                                                                 self.robot_pose[i].pose.orientation.w])
+                    heading[i] = yaw
 
-                    #Get euler angle from neighbours pose quaternion
-                    error_heading = 0
-                    for j in neighbours[i]:
-                        (neighbour_roll, neighbour_pitch, neighbour_yaw) = euler_from_quaternion([self.robot_pose[j-1].pose.orientation.x,
-                                                                                self.robot_pose[j-1].pose.orientation.y,
-                                                                                self.robot_pose[j-1].pose.orientation.z,
-                                                                                self.robot_pose[j-1].pose.orientation.w])
-                        error_heading += neighbour_yaw - yaw
+                dist_p = p - p_d
 
-                    #----------------------------
-                    # Solve minimization problem
-                    #----------------------------
-                    #Construct a vector for the nominal controller and robot states
-                    u_nom = np.array([u_nom_x, u_nom_y])
-                    x_i = np.array([self.robot_pose[i].pose.position.x, self.robot_pose[i].pose.position.y])
+                #-----------------------------------
+                # Compute nominal (auto) controllers
+                #-----------------------------------
+                u_nom = np.dot(-L_G, dist_p)
+                u_nom_heading = np.dot(-L_G, heading)
+
+                #Convert nominal controller to CBF controller format
+                u_n = np.zeros((number_robots*n))
+                for i in range(number_robots):
+                    u_n[2*i] = u_nom[i, 0]
+                    u_n[2*i+1] = u_nom[i, 1]
+
+                # Create CBF constraint matrices
+                A_cm = np.zeros((len(edges), number_robots*n))
+                b_cm = np.zeros((len(edges)))
+                A_oa = np.zeros((len(edges), number_robots*n))
+                b_oa = np.zeros((len(edges)))
+                for i in range(len(edges)):
+                    aux_i = edges[i][0]-1
+                    aux_j = edges[i][1]-1
+                    b_cm[i] = self.cbf_h(p[aux_i], p[aux_j], safe_distance_cm, 1)
+                    b_oa[i] = self.cbf_h(p[aux_i], p[aux_j], safe_distance_oa, -1)
+                    grad_h_value_cm = np.transpose(self.cbf_gradh(p[aux_i], p[aux_j], 1))
+                    grad_h_value_oa = np.transpose(self.cbf_gradh(p[aux_i], p[aux_j], -1))
+                    A_cm[i, 2*aux_i:2*aux_i+2] = grad_h_value_cm
+                    A_cm[i, 2*aux_j:2*aux_j+2] = -grad_h_value_cm
+                    A_oa[i, 2*aux_i:2*aux_i+2] = grad_h_value_oa
+                    A_oa[i, 2*aux_j:2*aux_j+2] = -grad_h_value_oa
+
+                #---------------------------
+                # Solve minimization problem
+                #---------------------------
+                # Define linear constraints
+                constraint_cm = LinearConstraint(A_cm*cbf_cm, lb=-b_cm, ub=np.inf)
+                constraint_oa = LinearConstraint(A_oa*cbf_oa, lb=-b_oa, ub=np.inf)
+                
+                # Define objective function
+                def objective_function(u, u_n):
+                    return np.linalg.norm(u - u_n)**2
+                
+                # Construct the problem
+                u = minimize(
+                    objective_function,
+                    x0=u_n,
+                    args=(u_n,),
+                    constraints=[constraint_cm, constraint_oa],
+                )
+
+                #------------
+                # Send output
+                #------------
+                for i in range(number_robots):
+                    vel_cmd_msg[i].linear.x = u.x[2*i] * gains[0]
+                    vel_cmd_msg[i].linear.y = u.x[2*i+1] * gains[1]
+                    vel_cmd_msg[i].angular.z = u_nom_heading[i] * gains[2]
                     
-                    #Calculate CBF constraint in the form of a*u + b >= 0
-                    h_cm = np.zeros((number_neighbours[i], 1))
-                    grad_h_cm = np.zeros((number_neighbours[i], 2))
-                    h_oa = np.zeros((number_neighbours[i], 1))
-                    grad_h_oa = np.zeros((number_neighbours[i], 2))
-                    for j in range(number_neighbours[i]):
-                        x_j = np.array([self.robot_pose[neighbours[i][j]-1].pose.position.x, self.robot_pose[neighbours[i][j]-1].pose.position.y])
-                        h_cm[j] = safe_distance_cm**2 - np.linalg.norm(x_i - x_j)**2
-                        grad_h_cm[j] = -2*np.transpose(np.array([x_i[0] - x_j[0], x_i[1] - x_j[1]]))
-                        h_oa[j] = np.linalg.norm(x_i - x_j)**2 - safe_distance_oa**2
-                        grad_h_oa[j] = 2*np.transpose(np.array([x_i[0] - x_j[0], x_i[1] - x_j[1]]))
-
-                    # Comunication maintenance CBF
-                    a_cm = grad_h_cm
-                    b_cm = alfa*h_cm.reshape(number_neighbours[i],)
-
-                    # Obstacle avoidance CBF
-                    a_oa = grad_h_oa
-                    b_oa = alfa*h_oa.reshape(number_neighbours[i],)
-
-                    # Define linear constraints
-                    constraint_cm = LinearConstraint(a_cm*cbf_cm, lb=-b_cm, ub=np.inf)
-                    constraint_oa = LinearConstraint(a_oa*cbf_oa, lb=-b_oa, ub=np.inf)
-                    
-                    # Define objective function
-                    def objective_function(u, u_nom):
-                        return np.linalg.norm(u - u_nom)**2
-                    
-                    # Construct the problem
-                    u = minimize(
-                        objective_function,
-                        x0=u_nom,
-                        args=(u_nom,),
-                        constraints=[constraint_cm, constraint_oa],
-                    )
-
-                    # The optimal value for u
-                    u_x.append(u.x[0])
-                    u_y.append(u.x[1])
-
-                    u_heading.append(error_heading)
-
-                    #----------------
-                    # Compute output
-                    #----------------
-                    vel_cmd_msg[i].linear.x = u_x[i] * gains[0]
-                    vel_cmd_msg[i].linear.y = u_y[i] * gains[1]
-                    vel_cmd_msg[i].angular.z = u_heading[i] * gains[2]
-
             #Else stop robot
             else:
                 for i in range(number_robots):
@@ -259,6 +261,22 @@ class CBFFormationControllerCentralized():
 
         #Save when last pose was received
         self.last_received_robot_pose[i] = rospy.Time.now()
+
+    #=====================================
+    #        Function to calculate 
+    #       the CBF safety function
+    #=====================================
+    def cbf_h(self, p_i, p_j, safe_distance, dir):
+        # Dir 1 corresponds to CM and -1 to OA
+        return dir*(safe_distance**2 - np.linalg.norm(p_i - p_j)**2)
+
+    #=====================================
+    #  Function to calculate the gradient 
+    #     of the CBF safety function
+    #=====================================
+    def cbf_gradh(self, p_i, p_j, dir):
+        # Dir 1 corresponds to CM and -1 to OA
+        return dir*(-2*np.array([[p_i[0]-p_j[0]], [p_i[1]-p_j[1]]]))
 
 
 #=====================================

@@ -13,7 +13,7 @@
   </include>
 
   <!-- Ideal formation position -->
-  <rosparam param="formation_positions">[[0, 2, 0.5], [0, 0, 0.5], [0, -2, 0.5], [2, 2, 0.5], [2, -2, 0.5], [2, 0, 0.5], [-2, 0, 0.5]]</rosparam>
+  <rosparam param="formation_positions">[[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]</rosparam>
 
   <!-- CBF Communication maintenance or obstacle avoidance activation (1 is activated/0 is deactivated) -->
   <param name="cbf_cm" value="1"/>
@@ -68,29 +68,11 @@
       args="-urdf -model nexus5 -param robot_description -x 3 -y -2 -z 0.5" />
   </group>
 
-  <!-- Nexus 6  -->
-  <group ns="nexus6">
-    <!-- Load robot description -->
-    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
-    <!-- Spawn the robot -->
-    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus6 -param robot_description -x 5 -y -1 -z 0.5" />
-  </group>
-
-  <!-- Nexus 7  -->
-  <group ns="nexus7">
-    <!-- Load robot description -->
-    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
-    <!-- Spawn the robot -->
-    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus7 -param robot_description -x -3 -y 1 -z 0.5" />
-  </group>
-
   <!-- Centralized auto node -->
   <group ns="Auto">
     <node name="cbf_formation_controller_centralized" pkg="first_task_formation_cbf" type="formation_keeping_centralized.py" output="screen" >
-      <rosparam param="robots_number">[1, 2, 3, 4, 5, 6, 7]</rosparam>
-      <rosparam param="neighbours">[[2, 4], [1, 3, 4, 5, 6, 7], [2, 5], [1, 2, 6], [2, 3, 6], [2, 4, 5], [2]]</rosparam>
+      <rosparam param="robots_number">[1, 2, 3, 4, 5]</rosparam>
+      <rosparam param="neighbours">[[2], [1, 3, 4, 5], [2], [2], [2]]</rosparam>
     </node>
   </group>
 
