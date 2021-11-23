@@ -15,13 +15,23 @@
   <!-- Ideal formation position -->
   <rosparam param="formation_positions">[[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]</rosparam>
 
+  <!-- Robots numbers -->
+  <rosparam param="robots_number">[1, 2, 3, 4, 5]</rosparam>
+
+  <!-- List of neighbours for each robot-->
+  <rosparam param="neighbours">[[2], [1, 3, 4, 5], [2], [2], [2]]</rosparam>
+
   <!-- CBF Communication maintenance or obstacle avoidance activation (1 is activated/0 is deactivated) -->
-  <param name="cbf_cm" value="1"/>
-  <param name="cbf_oa" value="1"/>
+  <param name="cbf_cm" value="0"/>
+  <param name="cbf_oa" value="0"/>
 
   <!-- Safe distance for communication maintenance and obstacle avoidance -->
-  <param name="safe_distance_cm" value="1.3"/>
+  <param name="safe_distance_cm" value="3"/>
   <param name="safe_distance_oa" value="0.9"/>
+
+  <!-- Variable to determine if HuIL is active or not (1 is activated/0 is deactivated) as well as the robot it affects -->
+  <param name="huil" value="1"/>
+  <param name="human_robot" value="5"/>
 
   <!-- Nexus 1  -->
   <group ns="nexus1">
@@ -71,8 +81,27 @@
   <!-- Centralized auto node -->
   <group ns="Auto">
     <node name="cbf_formation_controller_centralized" pkg="first_task_formation_cbf" type="formation_keeping_centralized.py" output="screen" >
-      <rosparam param="robots_number">[1, 2, 3, 4, 5]</rosparam>
-      <rosparam param="neighbours">[[2], [1, 3, 4, 5], [2], [2], [2]]</rosparam>
+    </node>
+  </group>
+
+  <!-- Human-In-The-Loop controller node -->
+  <group ns="HuIL">
+    <node name="key_teleop" pkg="first_task_formation_cbf" type="key_teleop.py" output="screen" launch-prefix="gnome-terminal --command" >
+      <param name="forward_rate" value="0.5"/>
+      <param name="backward_rate" value="0.5"/>
+      <param name="rotation_rate" value="0.5"/>
+      <param name="hz" value="50"/>
+    </node>
+  </group>
+
+  <!-- Logger node -->
+  <group ns="Logger">
+    <node name="logger" pkg="first_task_formation_cbf" type="logger.py" output="screen" >
+      <param name="show_motion" value="1"/>
+      <param name="cbf_cm_filename" value="/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/cbf_cm_log.csv"/>
+      <param name="cbf_oa_filename" value="/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/cbf_oa_log.csv"/>
+      <param name="controller_filename" value="/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/controller_log.csv"/>
+      <param name="nom_controller_filename" value="/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/nom_controller_log.csv"/>
     </node>
   </group>
 

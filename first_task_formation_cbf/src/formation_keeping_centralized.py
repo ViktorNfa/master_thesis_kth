@@ -15,14 +15,17 @@
 #  keep the communication bw robots or
 #   avoid colliding with other robots
 #=====================================
+
 from re import I, U
 import sys
 import rospy
 import copy
 import geometry_msgs.msg
+from rospy.core import loginfo
 import tf2_ros
 import tf2_geometry_msgs
 from tf.transformations import euler_from_quaternion
+from std_msgs.msg import Float64
 
 import numpy as np
 from scipy.optimize import minimize, LinearConstraint
@@ -41,11 +44,11 @@ class CBFFormationControllerCentralized():
         rospy.init_node('cbf_formation_controller_centralized')
 
         #Get the robots number from parameters
-        robots_number = rospy.get_param('~robots_number')
+        robots_number = rospy.get_param('/robots_number')
         number_robots = len(robots_number)
 
         #Get neighbour numbers from parameters
-        neighbours = rospy.get_param('~neighbours')
+        neighbours = rospy.get_param('/neighbours')
         number_neighbours = []
         for i in range(number_robots):
             number_neighbours.append(len(neighbours[i]))
@@ -76,6 +79,10 @@ class CBFFormationControllerCentralized():
         safe_distance_cm = rospy.get_param('/safe_distance_cm')
         safe_distance_oa = rospy.get_param('/safe_distance_oa')
 
+        #See if HuIL controller is activated and which robot it affects
+        huil = rospy.get_param('/huil')
+        human_robot = rospy.get_param('/human_robot')
+
         #Dimension of the problem
         n = 2
 
@@ -90,10 +97,13 @@ class CBFFormationControllerCentralized():
         #Init last received pose time
         self.last_received_robot_pose = []
 
-        # For each robot
+        #For each robot
         for i in range(number_robots):
             self.robot_pose.append(geometry_msgs.msg.PoseStamped())
             self.last_received_robot_pose.append(rospy.Time())
+
+        #Init HuIL controller velocity
+        self.vel_huil = geometry_msgs.msg.Twist()
 
         #Timeout in seconds
         timeout = 0.5
@@ -106,11 +116,34 @@ class CBFFormationControllerCentralized():
         #Setup robot pose subscriber
         for i in range(number_robots):
             rospy.Subscriber("/qualisys/nexus"+str(robots_number[i])+"/pose", geometry_msgs.msg.PoseStamped, self.robot_pose_callback, i)
+        
+        #Setup HuIL controller subscriber
+        rospy.Subscriber("/HuIL/key_vel", geometry_msgs.msg.Twist, self.huil_callback)
 
         #Setup velocity command publisher
         vel_pub = []
         for i in range(number_robots):
             vel_pub.append(rospy.Publisher("/nexus"+str(robots_number[i])+"/cmd_vel", geometry_msgs.msg.Twist, queue_size=100))
+
+        #Setup cbf functions publisher
+        cbf_cm_pub = []
+        cbf_oa_pub = []
+        for i in range(len(edges)):
+            cbf_cm_pub.append(rospy.Publisher("/cbf_function_cm"+"/".join(map(str,edges[i])), Float64, queue_size=100))
+            cbf_oa_pub.append(rospy.Publisher("/cbf_function_oa"+"/".join(map(str,edges[i])), Float64, queue_size=100))
+        #Setup message type
+        cbf_cm_msg = Float64()
+        cbf_oa_msg = Float64()
+
+        #Setup controller output publisher and message
+        nom_controller_pub = []
+        controller_pub = []
+        for i in range(number_robots):
+            nom_controller_pub.append(rospy.Publisher("/nom_controller"+str(i+1), geometry_msgs.msg.Vector3, queue_size=100))
+            controller_pub.append(rospy.Publisher("/controller"+str(i+1), geometry_msgs.msg.Vector3, queue_size=100))
+        #Setup message type
+        nom_controller_msg = geometry_msgs.msg.Vector3()
+        controller_msg = geometry_msgs.msg.Vector3()
 
         #Setup transform subscriber
         tf_buffer = []
@@ -124,7 +157,7 @@ class CBFFormationControllerCentralized():
                 rospy.loginfo("Wait for transform to be available for nexus"+str(robots_number[i]))
                 rospy.sleep(1)
 
-        #Create a ROS Twist message for velocity command and cbf_output
+        #Create a ROS Twist message for velocity command
         vel_cmd_msg = []
         for i in range(number_robots):
             vel_cmd_msg.append(geometry_msgs.msg.Twist())
@@ -132,14 +165,18 @@ class CBFFormationControllerCentralized():
         #-----------------------------------------------------------------
         # Loop at set frequency and publish position command if necessary
         #-----------------------------------------------------------------
-        #loop frequency in Hz
+        #Loop frequency in Hz
         loop_frequency = 50
         r = rospy.Rate(loop_frequency)
 
+        rospy.sleep(4)
+
         rospy.loginfo("CBF-Formation controller Centralized Initialized for nexus"+str(robots_number)+
-                      " with neighbours "+str(neighbours)+" with ideal positions "+str(formation_positions)
+                      " with neighbours "+str(neighbours)+" with ideal positions "+str(formation_positions)+
+                      " and CBF comunication maintenance "+str(cbf_cm)+" with distance "+str(safe_distance_cm)+
+                      " and obstacle avoidance "+str(cbf_oa)+" with distance "+str(safe_distance_oa)
                       )
-        
+
         while not rospy.is_shutdown():
             #Run controller if robot position and neighbours position have been received
             now  = rospy.Time.now()
@@ -148,9 +185,9 @@ class CBFFormationControllerCentralized():
 
             if all(init_pose):
 
-                #--------------------------------------
+                #---------------------------------------
                 # Get position and orientation matrices
-                #--------------------------------------
+                #---------------------------------------
                 p = np.zeros((number_robots, 2))
                 heading = np.zeros((number_robots))
                 for i in range(number_robots):
@@ -167,19 +204,29 @@ class CBFFormationControllerCentralized():
 
                 dist_p = p - p_d
 
-                #-----------------------------------
+                #------------------------------------
                 # Compute nominal (auto) controllers
-                #-----------------------------------
+                #------------------------------------
                 u_nom = np.dot(-L_G, dist_p)
                 u_nom_heading = np.dot(-L_G, heading)
 
-                #Convert nominal controller to CBF controller format
+                #Convert nominal controller to CBF controller format and add HuIL
                 u_n = np.zeros((number_robots*n))
                 for i in range(number_robots):
-                    u_n[2*i] = u_nom[i, 0]
-                    u_n[2*i+1] = u_nom[i, 1]
+                    #For the robot controlled with HuIL
+                    if i == human_robot-1:
+                        u_n[2*i] = huil*self.vel_huil.linear.x + u_nom[i, 0]
+                        u_n[2*i+1] = huil*self.vel_huil.angular.z + u_nom[i, 1]
+                    else:
+                        u_n[2*i] = u_nom[i, 0]
+                        u_n[2*i+1] = u_nom[i, 1]
 
-                # Create CBF constraint matrices
+                    #Publish nominal controller
+                    nom_controller_msg.x = u_n[2*i]
+                    nom_controller_msg.y = u_n[2*i+1]
+                    nom_controller_pub[i].publish(nom_controller_msg)
+
+                #Create CBF constraint matrices
                 A_cm = np.zeros((len(edges), number_robots*n))
                 b_cm = np.zeros((len(edges)))
                 A_oa = np.zeros((len(edges), number_robots*n))
@@ -187,27 +234,35 @@ class CBFFormationControllerCentralized():
                 for i in range(len(edges)):
                     aux_i = edges[i][0]-1
                     aux_j = edges[i][1]-1
-                    b_cm[i] = self.cbf_h(p[aux_i], p[aux_j], safe_distance_cm, 1)
-                    b_oa[i] = self.cbf_h(p[aux_i], p[aux_j], safe_distance_oa, -1)
+
+                    b_cm[i] = alfa*self.cbf_h(p[aux_i], p[aux_j], safe_distance_cm, 1)
+                    b_oa[i] = alfa*self.cbf_h(p[aux_i], p[aux_j], safe_distance_oa, -1)
+                    #Publish cbf function message
+                    cbf_cm_msg = b_cm[i]
+                    cbf_oa_msg = b_oa[i]
+                    cbf_cm_pub[i].publish(cbf_cm_msg)
+                    cbf_oa_pub[i].publish(cbf_oa_msg)
+
                     grad_h_value_cm = np.transpose(self.cbf_gradh(p[aux_i], p[aux_j], 1))
                     grad_h_value_oa = np.transpose(self.cbf_gradh(p[aux_i], p[aux_j], -1))
+
                     A_cm[i, 2*aux_i:2*aux_i+2] = grad_h_value_cm
                     A_cm[i, 2*aux_j:2*aux_j+2] = -grad_h_value_cm
                     A_oa[i, 2*aux_i:2*aux_i+2] = grad_h_value_oa
                     A_oa[i, 2*aux_j:2*aux_j+2] = -grad_h_value_oa
 
-                #---------------------------
+                #----------------------------
                 # Solve minimization problem
-                #---------------------------
-                # Define linear constraints
-                constraint_cm = LinearConstraint(A_cm*cbf_cm, lb=-b_cm, ub=np.inf)
-                constraint_oa = LinearConstraint(A_oa*cbf_oa, lb=-b_oa, ub=np.inf)
+                #----------------------------
+                #Define linear constraints
+                constraint_cm = LinearConstraint(A_cm*cbf_cm, lb=-b_cm*cbf_cm, ub=np.inf)
+                constraint_oa = LinearConstraint(A_oa*cbf_oa, lb=-b_oa*cbf_oa, ub=np.inf)
                 
-                # Define objective function
+                #Define objective function
                 def objective_function(u, u_n):
                     return np.linalg.norm(u - u_n)**2
                 
-                # Construct the problem
+                #Construct the problem
                 u = minimize(
                     objective_function,
                     x0=u_n,
@@ -215,14 +270,19 @@ class CBFFormationControllerCentralized():
                     constraints=[constraint_cm, constraint_oa],
                 )
 
-                #------------
+                #-------------
                 # Send output
-                #------------
+                #-------------
                 for i in range(number_robots):
                     vel_cmd_msg[i].linear.x = u.x[2*i] * gains[0]
                     vel_cmd_msg[i].linear.y = u.x[2*i+1] * gains[1]
                     vel_cmd_msg[i].angular.z = u_nom_heading[i] * gains[2]
-                    
+
+                    #Publish controller output
+                    controller_msg.x = u.x[2*i]
+                    controller_msg.y = u.x[2*i+1]
+                    controller_pub[i].publish(controller_msg)
+
             #Else stop robot
             else:
                 for i in range(number_robots):
@@ -230,9 +290,9 @@ class CBFFormationControllerCentralized():
                     vel_cmd_msg[i].linear.y = 0
                     vel_cmd_msg[i].angular.z = 0
 
-            #-----------------
-            # Publish command
-            #-----------------
+            #------------------------------------------
+            # Publish command & controller output norm
+            #------------------------------------------
             try:
                 transform = []
                 vel_cmd_msg_transformed = []
@@ -261,6 +321,14 @@ class CBFFormationControllerCentralized():
 
         #Save when last pose was received
         self.last_received_robot_pose[i] = rospy.Time.now()
+
+    #=====================================
+    #          Callback function 
+    #         for huil controller
+    #=====================================
+    def huil_callback(self, twist_msg):
+        #Save huil controller twist as class variable
+        self.vel_huil = twist_msg
 
     #=====================================
     #        Function to calculate 
