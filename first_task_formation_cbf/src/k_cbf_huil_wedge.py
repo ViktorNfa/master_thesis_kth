@@ -53,10 +53,10 @@ class KCBFHuILWedge():
         for i in range(number_robots):
             A_arena[4*i:4*i+4, 2*i:2*i+2] = As
         b_arena = np.zeros((number_robots*4))
-        xmax = 3
-        xmin = -3
-        ymax = 2.25
-        ymin = -2.25
+        xmax = 2.25
+        xmin = -2.25
+        ymax = 3
+        ymin = -3
 
         #Create wedge CBF
         Aw = np.array([[-2.25/6, -1], [-2.25/6, 1]])
