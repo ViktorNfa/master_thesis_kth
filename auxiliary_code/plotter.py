@@ -18,6 +18,7 @@ cbf_cm_filename = '/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_
 cbf_oa_filename = '/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/cbf_oa_log.csv'
 controller_filename = '/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/controller_log.csv'
 nom_controller_filename = '/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/nom_controller_log.csv'
+huil_controller_filename = '/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/huil_controller_log.csv'
 
 #---------------
 # Read the data
@@ -26,9 +27,10 @@ nom_controller_filename = '/home/viktornfa/catkin_ws/src/master_thesis_victor/au
 df_cbf_cm = pd.read_csv(cbf_cm_filename)
 df_cbf_oa = pd.read_csv(cbf_oa_filename)
 
-#For the final controller
+#For the final, nominal and HuIL controller
 df_controller = pd.read_csv(controller_filename)
 df_nom_controller = pd.read_csv(nom_controller_filename)
+df_huil_controller = pd.read_csv(huil_controller_filename)
 
 #---------------
 # Plot the data
@@ -83,7 +85,7 @@ ax_norm.axhline(y=0, color='k', lw=1)
 plt.show()
 
 #For robot 5
-show_action = False
+show_action = True
 if show_action:
     plt.ion()
 
@@ -105,11 +107,10 @@ if show_action:
         arrow2.remove()
         ux = df_controller[controller_col[-2]].iloc[starting_point+i]
         uy = df_controller[controller_col[-1]].iloc[starting_point+i]
-        unx = df_nom_controller[controller_col[-2]].iloc[starting_point+i]
-        uny = df_nom_controller[controller_col[-1]].iloc[starting_point+i]
-        arrow1 = plt.arrow(x=579, y=373, dx=100*unx, dy=100*uny, width=10, facecolor='red', edgecolor='none')
-        arrow2 = plt.arrow(x=579, y=373, dx=100*uy, dy=100*uy, width=10, facecolor='blue', edgecolor='none')
+        uhuilx = df_huil_controller[controller_col[-2]].iloc[starting_point+i]
+        uhuily = df_huil_controller[controller_col[-1]].iloc[starting_point+i]
+        arrow1 = plt.arrow(x=579, y=373, dx=-300*uhuily, dy=-300*uhuilx, width=10, facecolor='red', edgecolor='none')
+        arrow2 = plt.arrow(x=579, y=373, dx=-300*uy, dy=-300*ux, width=10, facecolor='blue', edgecolor='none')
         fig.canvas.draw()
         fig.canvas.flush_events()
-        print(i)
 

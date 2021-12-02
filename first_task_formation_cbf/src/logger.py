@@ -46,6 +46,8 @@ class CBFLogger():
         for i in range(number_robots):
             number_neighbours.append(len(neighbours[i]))
 
+        human_robot = rospy.get_param('/human_robot')
+
         #Create edge list for the name of columns as well as robot name columns
         edges = []
         robot_col = ['Time']
@@ -69,6 +71,8 @@ class CBFLogger():
         controller_filename = rospy.get_param('~controller_filename')
         global nom_controller_filename
         nom_controller_filename = rospy.get_param('~nom_controller_filename')
+        global huil_controller_filename
+        huil_controller_filename = rospy.get_param('~huil_controller_filename')
 
         #Create dataframes to pickle the data
         global df_cbf_cm
@@ -79,6 +83,8 @@ class CBFLogger():
         df_controller = pd.DataFrame(columns=robot_col)
         global df_nom_controller
         df_nom_controller = pd.DataFrame(columns=robot_col)  
+        global df_huil_controller
+        df_huil_controller = pd.DataFrame(columns=[robot_col[0], robot_col[2*human_robot-1], robot_col[2*human_robot]]) 
 
         #Setup controller output norm subscriber and init output
         self.controller = [0.]
@@ -176,6 +182,10 @@ class CBFLogger():
                 fig.canvas.draw()
                 fig.canvas.flush_events()
 
+            #HuIL controller
+            df2_huil_controller = pd.DataFrame(np.array([[time, uhuilx, uhuily]]), columns=[robot_col[0], robot_col[2*human_robot-1], robot_col[2*human_robot]])
+            df_huil_controller = df_huil_controller.append(df2_huil_controller, ignore_index=True)
+
             #---------------------------------
             # Sleep to respect loop frequency
             #---------------------------------
@@ -224,6 +234,7 @@ class CBFLogger():
         df_cbf_oa.to_csv(cbf_oa_filename, index=False)
         df_controller.to_csv(controller_filename, index=False)
         df_nom_controller.to_csv(nom_controller_filename, index=False)
+        df_huil_controller.to_csv(huil_controller_filename, index=False)
 
         rospy.loginfo("FINISHED LOGGING!")
 

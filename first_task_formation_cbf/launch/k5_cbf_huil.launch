@@ -13,7 +13,7 @@
   </include>
 
   <!-- Ideal formation position -->
-  <rosparam param="formation_positions">[[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]</rosparam>
+  <rosparam param="formation_positions">[[0, 1], [0, 0], [0, -1], [1, 1], [1, -1]]</rosparam>
 
   <!-- Robots numbers -->
   <rosparam param="robots_number">[1, 2, 3, 4, 5]</rosparam>
@@ -26,8 +26,8 @@
   <param name="cbf_oa" value="1"/>
 
   <!-- Safe distance for communication maintenance and obstacle avoidance -->
-  <param name="safe_distance_cm" value="3"/>
-  <param name="safe_distance_oa" value="0.9"/>
+  <param name="safe_distance_cm" value="1.5"/>
+  <param name="safe_distance_oa" value="0.5"/>
 
   <!-- Variable to determine if HuIL is active or not (1 is activated/0 is deactivated) as well as the robot it affects -->
   <param name="huil" value="1"/>
@@ -39,7 +39,7 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus1 -param robot_description -x -1 -y 3 -z 0.5" />
+      args="-urdf -model nexus1 -param robot_description -x -1 -y 1.7 -z 0.5" />
   </group>
     
   <!-- Nexus 2  -->
@@ -57,7 +57,7 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus3 -param robot_description -x 0 -y -3 -z 0.5" />
+      args="-urdf -model nexus3 -param robot_description -x 0 -y -1.7 -z 0.5" />
   </group>
 
   <!-- Nexus 4  -->
@@ -66,7 +66,7 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus4 -param robot_description -x 3 -y 3 -z 0.5" />
+      args="-urdf -model nexus4 -param robot_description -x 2 -y 1.7 -z 0.5" />
   </group>
 
   <!-- Nexus 5  -->
@@ -75,12 +75,12 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus5 -param robot_description -x 3 -y -2 -z 0.5" />
+      args="-urdf -model nexus5 -param robot_description -x 2 -y -1.7 -z 0.5" />
   </group>
 
   <!-- Centralized auto node -->
   <group ns="Auto">
-    <node name="cbf_formation_controller_centralized" pkg="first_task_formation_cbf" type="formation_keeping_centralized.py" output="screen" >
+    <node name="k_cbf_huil" pkg="first_task_formation_cbf" type="k_cbf_huil.py" output="screen" >
     </node>
   </group>
 
