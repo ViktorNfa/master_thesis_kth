@@ -91,6 +91,9 @@ class KCBFExtraHuIL():
         safe_distance_oa = rospy.get_param('/safe_distance_oa')
         if safe_distance_oa < 2*0.27:
             safe_distance_oa = 2*0.27
+        safe_distance_extra = rospy.get_param('/safe_distance_extra')
+        if safe_distance_extra < 2*0.27:
+            safe_distance_extra = 2*0.27
 
         #See if HuIL controller is activated and which robot it affects
         #This robot will also be the extra robot
@@ -105,6 +108,7 @@ class KCBFExtraHuIL():
 
         #CBF constraint parameters
         alfa = 1
+        alfa_extra = 1
 
         #Init robot pose
         self.robot_pose = []
@@ -230,7 +234,7 @@ class KCBFExtraHuIL():
                 #---------------------------------------
                 # Get position and orientation matrices
                 #---------------------------------------
-                p = np.zeros((number_robots, 2))
+                p = np.zeros((number_robots, n))
                 heading = np.zeros((number_robots))
                 for i in range(number_robots):
                     #Get x and y position from robot pose
@@ -247,7 +251,7 @@ class KCBFExtraHuIL():
                 dist_p = p - p_d
 
                 #Position of the extra-HuIL robot
-                huil_p = np.array(([self.huil_robot_pose.pose.position.x, self.huil_robot_pose.pose.position.y]))
+                huil_p = np.array([self.huil_robot_pose.pose.position.x, self.huil_robot_pose.pose.position.y])
 
                 #------------------------------------
                 # Compute nominal (auto) controllers
@@ -266,7 +270,9 @@ class KCBFExtraHuIL():
                 #For the extra-HuIL robot, set its heading to just the first robot
                 huil_u_nom_heading = - (huil_heading - heading[0])
 
-                #Convert nominal controller to CBF controller format and add HuIL
+                #Convert nominal controller to CBF controller format and CBF for extra-HuIL robot
+                A_extra = np.zeros((number_robots, number_robots*n))
+                b_extra = np.zeros((number_robots))
                 u_n = np.zeros((number_robots*n))
                 for i in range(number_robots):
                     u_n[2*i] = u_nom[i, 0]
@@ -276,6 +282,9 @@ class KCBFExtraHuIL():
                     nom_controller_msg.x = u_n[2*i]
                     nom_controller_msg.y = u_n[2*i+1]
                     nom_controller_pub[i].publish(nom_controller_msg)
+
+                    A_extra[i, 2*i:2*i+2] = 2*np.array([p[i, 0]-huil_p[0], p[i, 1]-huil_p[1]])
+                    b_extra[i] = alfa_extra*self.cbf_h(p[i], huil_p, safe_distance_extra, -1)
 
                 #Create CBF constraint matrices
                 A_cm = np.zeros((len(edges), number_robots*n))
@@ -304,10 +313,10 @@ class KCBFExtraHuIL():
 
                 #Calculate CBF for arena safety
                 for i in range(number_robots):
-                    b_arena[4*i] = xmax - p[i, 0]
-                    b_arena[4*i+1] = p[i, 0] - xmin
-                    b_arena[4*i+2] = ymax - p[i, 1]
-                    b_arena[4*i+3] = p[i, 1] - ymin
+                    b_arena[4*i] = alfa*(xmax - p[i, 0])
+                    b_arena[4*i+1] = alfa*(p[i, 0] - xmin)
+                    b_arena[4*i+2] = alfa*(ymax - p[i, 1])
+                    b_arena[4*i+3] = alfa*(p[i, 1] - ymin)
 
                 #----------------------------
                 # Solve minimization problem
@@ -316,6 +325,7 @@ class KCBFExtraHuIL():
                 constraint_cm = LinearConstraint(A_cm*cbf_cm, lb=-b_cm*cbf_cm, ub=np.inf)
                 constraint_oa = LinearConstraint(A_oa*cbf_oa, lb=-b_oa*cbf_oa, ub=np.inf)
                 constraint_arena = LinearConstraint(A_arena, lb=-b_arena, ub=np.inf)
+                constraint_extra = LinearConstraint(A_extra, lb=-b_extra, ub=np.inf)
                 
                 #Define objective function
                 def objective_function(u, u_n):
@@ -326,7 +336,7 @@ class KCBFExtraHuIL():
                     objective_function,
                     x0=u_n,
                     args=(u_n,),
-                    constraints=[constraint_cm, constraint_oa, constraint_arena],
+                    constraints=[constraint_cm, constraint_oa, constraint_arena, constraint_extra],
                 )
 
                 #-------------

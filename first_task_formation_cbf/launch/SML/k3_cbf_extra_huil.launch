@@ -29,9 +29,10 @@
   <param name="cbf_cm" value="1"/>
   <param name="cbf_oa" value="1"/>
 
-  <!-- Safe distance for communication maintenance and obstacle avoidance -->
+  <!-- Safe distance for communication maintenance and obstacle avoidance (as well as extra-HuIL OA) -->
   <param name="safe_distance_cm" value="1.0"/>
   <param name="safe_distance_oa" value="0.5"/>
+  <param name="safe_distance_extra" value="1"/>
 
   <!-- Variable to determine if HuIL is active or not (1 is activated/0 is deactivated) as well as the robot it affects -->
   <!-- Additionally the HuIL robot will be also the extra one -->

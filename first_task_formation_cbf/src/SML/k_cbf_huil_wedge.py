@@ -273,15 +273,15 @@ class KCBFHuILWedge():
 
                 #Calculate CBF for arena safety
                 for i in range(number_robots):
-                    b_arena[4*i] = xmax - p[i, 0]
-                    b_arena[4*i+1] = p[i, 0] - xmin
-                    b_arena[4*i+2] = ymax - p[i, 1]
-                    b_arena[4*i+3] = p[i, 1] - ymin
+                    b_arena[4*i] = alfa*(xmax - p[i, 0])
+                    b_arena[4*i+1] = alfa*(p[i, 0] - xmin)
+                    b_arena[4*i+2] = alfa*(ymax - p[i, 1])
+                    b_arena[4*i+3] = alfa*(p[i, 1] - ymin)
 
                 #Calculate CBF for wedge
                 for i in range(number_robots):
-                    b_wedge[2*i] = -2.25/6*p[i, 0] + 1.125 - p[i, 1]
-                    b_wedge[2*i+1] = p[i, 1] - 2.25/6*p[i, 0] + 1.125
+                    b_wedge[2*i] = alfa*(-2.25/6*p[i, 0] + 1.125 - p[i, 1])
+                    b_wedge[2*i+1] = alfa*(p[i, 1] - 2.25/6*p[i, 0] + 1.125)
 
                 #----------------------------
                 # Solve minimization problem
