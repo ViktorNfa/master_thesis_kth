@@ -31,7 +31,7 @@ import numpy as np
 from scipy.optimize import minimize, LinearConstraint
 
 
-class KCBFHuILWedge():
+class KCBFExtraHuIL():
     #=====================================
     #         Class constructor
     #  Initializes node and subscribers
@@ -41,7 +41,7 @@ class KCBFHuILWedge():
         # Initialisation 
         #----------------
         #Initialize node
-        rospy.init_node('k_cbf_guil_wedge')
+        rospy.init_node('k_cbf_extra_huil')
 
         #Get the robots number from parameters
         robots_number = rospy.get_param('/robots_number')
@@ -53,17 +53,10 @@ class KCBFHuILWedge():
         for i in range(number_robots):
             A_arena[4*i:4*i+4, 2*i:2*i+2] = As
         b_arena = np.zeros((number_robots*4))
-        xmax = 2.25
-        xmin = -2.25
-        ymax = 3
+        xmax = 2
+        xmin = -1.4
+        ymax = 1.8
         ymin = -3
-
-        #Create wedge CBF
-        Aw = np.array([[-2.25/6, -1], [-2.25/6, 1]])
-        A_wedge = np.zeros((number_robots*2, number_robots*2))
-        for i in range(number_robots):
-            A_wedge[2*i:2*i+2, 2*i:2*i+2] = Aw
-        b_wedge = np.zeros((number_robots*2))
 
         #Get neighbour numbers from parameters
         neighbours = rospy.get_param('/neighbours')
@@ -96,8 +89,11 @@ class KCBFHuILWedge():
         #Maximum/minimum safe distance for CBF
         safe_distance_cm = rospy.get_param('/safe_distance_cm')
         safe_distance_oa = rospy.get_param('/safe_distance_oa')
+        if safe_distance_oa < 2*0.27:
+            safe_distance_oa = 2*0.27
 
         #See if HuIL controller is activated and which robot it affects
+        #This robot will also be the extra robot
         huil = rospy.get_param('/huil')
         human_robot = rospy.get_param('/human_robot')
 
@@ -120,20 +116,31 @@ class KCBFHuILWedge():
             self.robot_pose.append(geometry_msgs.msg.PoseStamped())
             self.last_received_robot_pose.append(rospy.Time())
 
+        #Init extra-HuIL robot pose
+        self.huil_robot_pose = geometry_msgs.msg.PoseStamped()
+        #Init extra-HuIL robot last received pose time
+        self.huil_last_received_robot_pose = rospy.Time()
+
         #Init HuIL controller velocity
         self.vel_huil = geometry_msgs.msg.Twist()
 
         #Timeout in seconds
         timeout = 0.5
 
-        #Booleans to check is positions have been received
+        #Booleans to check if positions have been received
         init_pose = []
         for i in range(number_robots):
             init_pose.append(bool())
 
+        #Boolean to check if extra-HuIL position has been received
+        huil_init_pose = False
+
         #Setup robot pose subscriber
         for i in range(number_robots):
-            rospy.Subscriber("/qualisys/nexus"+str(robots_number[i])+"/pose", geometry_msgs.msg.PoseStamped, self.robot_pose_callback, i)
+            rospy.Subscriber("/qualisys/nexus"+str(robots_number[i]-1)+"/pose", geometry_msgs.msg.PoseStamped, self.robot_pose_callback, i)
+
+        #Setup extra-HuIL robot pose subscriber
+        rospy.Subscriber("/qualisys/nexus"+str(human_robot-1)+"/pose", geometry_msgs.msg.PoseStamped, self.huil_robot_pose_callback)
         
         #Setup HuIL controller subscriber
         rospy.Subscriber("/HuIL/key_vel", geometry_msgs.msg.Twist, self.huil_callback)
@@ -141,7 +148,10 @@ class KCBFHuILWedge():
         #Setup velocity command publisher
         vel_pub = []
         for i in range(number_robots):
-            vel_pub.append(rospy.Publisher("/nexus"+str(robots_number[i])+"/cmd_vel", geometry_msgs.msg.Twist, queue_size=100))
+            vel_pub.append(rospy.Publisher("/nexus"+str(robots_number[i]-1)+"/cmd_vel", geometry_msgs.msg.Twist, queue_size=100))
+
+        #Setup extra-HuIL robot velocity command publisher
+        huil_vel_pub = rospy.Publisher("/nexus"+str(human_robot-1)+"/cmd_vel", geometry_msgs.msg.Twist, queue_size=100)
 
         #Setup cbf functions publisher
         cbf_cm_pub = []
@@ -171,14 +181,25 @@ class KCBFHuILWedge():
             tf_listener.append(tf2_ros.TransformListener(tf_buffer[i]))
         
             #Wait for transform to be available
-            while not tf_buffer[i].can_transform('mocap', "nexus"+str(robots_number[i]), rospy.Time()):
-                rospy.loginfo("Wait for transform to be available for nexus"+str(robots_number[i]))
+            while not tf_buffer[i].can_transform('mocap', "nexus"+str(robots_number[i]-1), rospy.Time()):
+                rospy.loginfo("Wait for transform to be available for nexus"+str(robots_number[i]-1))
                 rospy.sleep(1)
+        
+        #Setup extra-HuIL transform subscriber
+        huil_tf_buffer = tf2_ros.Buffer()
+        huil_tf_listener = tf2_ros.TransformListener(huil_tf_buffer)        
+        #Wait for transform to be available
+        while not huil_tf_buffer.can_transform('mocap', "nexus"+str(human_robot-1), rospy.Time()):
+            rospy.loginfo("Wait for transform to be available for nexus"+str(human_robot-1))
+            rospy.sleep(1)
 
         #Create a ROS Twist message for velocity command
         vel_cmd_msg = []
         for i in range(number_robots):
             vel_cmd_msg.append(geometry_msgs.msg.Twist())
+
+        #Create a ROS Twist message for extra-HuIL velocity command
+        huil_vel_cmd_msg = geometry_msgs.msg.Twist()
 
         #-----------------------------------------------------------------
         # Loop at set frequency and publish position command if necessary
@@ -192,7 +213,8 @@ class KCBFHuILWedge():
         rospy.loginfo("CBF-Formation controller Centralized Initialized for nexus"+str(robots_number)+
                       " with neighbours "+str(neighbours)+" with ideal positions "+str(formation_positions)+
                       " and CBF comunication maintenance "+str(cbf_cm)+" with distance "+str(safe_distance_cm)+
-                      " and obstacle avoidance "+str(cbf_oa)+" with distance "+str(safe_distance_oa)
+                      " and obstacle avoidance "+str(cbf_oa)+" with distance "+str(safe_distance_oa)+
+                      " as well as an extra HuIL robot "+str(human_robot)
                       )
 
         while not rospy.is_shutdown():
@@ -200,8 +222,10 @@ class KCBFHuILWedge():
             now  = rospy.Time.now()
             for i in range(number_robots):
                 init_pose[i] = (now.to_sec() < self.last_received_robot_pose[i].to_sec() + timeout)
+            
+            huil_init_pose = (now.to_sec() < self.huil_last_received_robot_pose.to_sec() + timeout)
 
-            if all(init_pose):
+            if all(init_pose) and huil_init_pose:
 
                 #---------------------------------------
                 # Get position and orientation matrices
@@ -222,22 +246,31 @@ class KCBFHuILWedge():
 
                 dist_p = p - p_d
 
+                #Position of the extra-HuIL robot
+                huil_p = np.array(([self.huil_robot_pose.pose.position.x, self.huil_robot_pose.pose.position.y]))
+
                 #------------------------------------
                 # Compute nominal (auto) controllers
                 #------------------------------------
                 u_nom = np.dot(-L_G, dist_p)
                 u_nom_heading = np.dot(-L_G, heading)
+                #In case mecanum-wheels friction is causing unwanted rotations
+                u_nom_heading[0] = - heading[0]
+
+                #Get euler angle from robot pose quaternion
+                (roll, pitch, huil_heading) = euler_from_quaternion([self.huil_robot_pose.pose.orientation.x,
+                                                                    self.huil_robot_pose.pose.orientation.y,
+                                                                    self.huil_robot_pose.pose.orientation.z,
+                                                                    self.huil_robot_pose.pose.orientation.w])
+
+                #For the extra-HuIL robot, set its heading to just the first robot
+                huil_u_nom_heading = - (huil_heading - heading[0])
 
                 #Convert nominal controller to CBF controller format and add HuIL
                 u_n = np.zeros((number_robots*n))
                 for i in range(number_robots):
-                    #For the robot controlled with HuIL
-                    if i == human_robot-1:
-                        u_n[2*i] = huil*self.vel_huil.linear.x + u_nom[i, 0]
-                        u_n[2*i+1] = huil*self.vel_huil.angular.z + u_nom[i, 1]
-                    else:
-                        u_n[2*i] = u_nom[i, 0]
-                        u_n[2*i+1] = u_nom[i, 1]
+                    u_n[2*i] = u_nom[i, 0]
+                    u_n[2*i+1] = u_nom[i, 1]
 
                     #Publish nominal controller
                     nom_controller_msg.x = u_n[2*i]
@@ -276,11 +309,6 @@ class KCBFHuILWedge():
                     b_arena[4*i+2] = ymax - p[i, 1]
                     b_arena[4*i+3] = p[i, 1] - ymin
 
-                #Calculate CBF for wedge
-                for i in range(number_robots):
-                    b_wedge[2*i] = -2.25/6*p[i, 0] + 1.125 - p[i, 1]
-                    b_wedge[2*i+1] = p[i, 1] - 2.25/6*p[i, 0] + 1.125
-
                 #----------------------------
                 # Solve minimization problem
                 #----------------------------
@@ -288,7 +316,6 @@ class KCBFHuILWedge():
                 constraint_cm = LinearConstraint(A_cm*cbf_cm, lb=-b_cm*cbf_cm, ub=np.inf)
                 constraint_oa = LinearConstraint(A_oa*cbf_oa, lb=-b_oa*cbf_oa, ub=np.inf)
                 constraint_arena = LinearConstraint(A_arena, lb=-b_arena, ub=np.inf)
-                constraint_wedge = LinearConstraint(A_wedge, lb=-b_wedge, ub=np.inf)
                 
                 #Define objective function
                 def objective_function(u, u_n):
@@ -299,7 +326,7 @@ class KCBFHuILWedge():
                     objective_function,
                     x0=u_n,
                     args=(u_n,),
-                    constraints=[constraint_cm, constraint_oa, constraint_arena, constraint_wedge],
+                    constraints=[constraint_cm, constraint_oa, constraint_arena],
                 )
 
                 #-------------
@@ -315,12 +342,22 @@ class KCBFHuILWedge():
                     controller_msg.y = u.x[2*i+1]
                     controller_pub[i].publish(controller_msg)
 
+                #For the extra-HuIL robot controlled
+                huil_vel_cmd_msg.linear.x = huil*self.vel_huil.linear.x * gains[0]
+                huil_vel_cmd_msg.linear.y = huil*self.vel_huil.angular.z * gains[1]
+                huil_vel_cmd_msg.angular.z = huil*huil_u_nom_heading * gains[2]
+
             #Else stop robot
             else:
                 for i in range(number_robots):
                     vel_cmd_msg[i].linear.x = 0
                     vel_cmd_msg[i].linear.y = 0
                     vel_cmd_msg[i].angular.z = 0
+
+                #For the extra-HuIL robot controlled
+                huil_vel_cmd_msg.linear.x = 0
+                huil_vel_cmd_msg.linear.y = 0
+                huil_vel_cmd_msg.angular.z = 0
 
             #------------------------------------------
             # Publish command & controller output norm
@@ -330,11 +367,19 @@ class KCBFHuILWedge():
                 vel_cmd_msg_transformed = []
                 for i in range(number_robots):
                     #Get transform from mocap frame to robot frame
-                    transform.append(tf_buffer[i].lookup_transform('mocap', "nexus"+str(robots_number[i]), rospy.Time()))
+                    transform.append(tf_buffer[i].lookup_transform('mocap', "nexus"+str(robots_number[i]-1), rospy.Time()))
                     #
                     vel_cmd_msg_transformed.append(transform_twist(vel_cmd_msg[i], transform[i]))
                     #Publish cmd message
                     vel_pub[i].publish(vel_cmd_msg_transformed[i])
+
+                #For the extra-HuIL robot controlled
+                #Get transform from mocap frame to robot frame
+                huil_transform = huil_tf_buffer.lookup_transform('mocap', "nexus"+str(human_robot-1), rospy.Time())
+                #
+                huil_vel_cmd_msg_transformed = transform_twist(huil_vel_cmd_msg, huil_transform)
+                #Publish cmd message
+                huil_vel_pub.publish(huil_vel_cmd_msg_transformed)
             except:
                 continue
 
@@ -353,6 +398,17 @@ class KCBFHuILWedge():
 
         #Save when last pose was received
         self.last_received_robot_pose[i] = rospy.Time.now()
+
+    #=====================================
+    #          Callback function 
+    #    for HuIL robot pose feedback
+    #=====================================
+    def huil_robot_pose_callback(self, pose_stamped_msg):
+        #Save robot pose as class variable
+        self.huil_robot_pose = pose_stamped_msg
+
+        #Save when last pose was received
+        self.huil_last_received_robot_pose = rospy.Time.now()
 
     #=====================================
     #          Callback function 
@@ -407,7 +463,7 @@ def transform_twist(twist= geometry_msgs.msg.Twist, transform_stamped = geometry
 #               Main
 #=====================================
 if __name__ == "__main__":
-    k3_cbf_huil = KCBFHuILWedge()
+    k_cbf_huil = KCBFExtraHuIL()
     try:
         rospy.spin()
     except ValueError as e:

@@ -61,6 +61,8 @@ class CBFFormationController():
         #Maximum/minimum safe distance for CBF
         safe_distance_cm = rospy.get_param('/safe_distance_cm')
         safe_distance_oa = rospy.get_param('/safe_distance_oa')
+        if safe_distance_oa < 2*0.27:
+            safe_distance_oa = 2*0.27
 
         #Controller gains (for x, y, heading)
         gains = (1, 1, 1)

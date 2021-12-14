@@ -1,6 +1,10 @@
 <?xml version="1.0"?>
 <launch>
+  <!-- For SML testing -->
+  <!-- <arg name="use_sim_time" default="false" /> -->
+  <!-- For simulation -->
   <arg name="use_sim_time" default="true" />
+
   <arg name="gui" default="true" />
   <arg name="headless" default="false" />
 
@@ -26,29 +30,38 @@
   <param name="cbf_oa" value="1"/>
 
   <!-- Safe distance for communication maintenance and obstacle avoidance -->
-  <param name="safe_distance_cm" value="1.5"/>
+  <param name="safe_distance_cm" value="1.0"/>
   <param name="safe_distance_oa" value="0.5"/>
 
   <!-- Variable to determine if HuIL is active or not (1 is activated/0 is deactivated) as well as the robot it affects -->
   <param name="huil" value="1"/>
   <param name="human_robot" value="5"/>
 
+  <!-- Nexus 0  -->
+  <group ns="nexus0">
+    <!-- Load robot description -->
+    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
+    <!-- Spawn the robot -->
+    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
+      args="-urdf -model nexus0 -param robot_description -x -1 -y 1.7 -z 0.5" />
+  </group>
+    
   <!-- Nexus 1  -->
   <group ns="nexus1">
     <!-- Load robot description -->
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus1 -param robot_description -x -1 -y 1.7 -z 0.5" />
+      args="-urdf -model nexus1 -param robot_description -x 0 -y 0 -z 0.5" />
   </group>
-    
+
   <!-- Nexus 2  -->
   <group ns="nexus2">
     <!-- Load robot description -->
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus2 -param robot_description -x 0 -y 0 -z 0.5" />
+      args="-urdf -model nexus2 -param robot_description -x 0 -y -1.7 -z 0.5" />
   </group>
 
   <!-- Nexus 3  -->
@@ -57,7 +70,7 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus3 -param robot_description -x 0 -y -1.7 -z 0.5" />
+      args="-urdf -model nexus3 -param robot_description -x 2 -y 1.7 -z 0.5" />
   </group>
 
   <!-- Nexus 4  -->
@@ -66,16 +79,7 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus4 -param robot_description -x 2 -y 1.7 -z 0.5" />
-  </group>
-
-  <!-- Nexus 5  -->
-  <group ns="nexus5">
-    <!-- Load robot description -->
-    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
-    <!-- Spawn the robot -->
-    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus5 -param robot_description -x 2 -y -1.7 -z 0.5" />
+      args="-urdf -model nexus4 -param robot_description -x 2 -y -1.7 -z 0.5" />
   </group>
 
   <!-- Centralized auto node -->
@@ -106,6 +110,8 @@
     </node>
   </group>
 
+  <!-- Motion capture system SML -->
+  <!-- <include file="$(find mocap_qualisys)/launch/qualisys.launch" /> -->
   <!-- Motion capture system simulation -->
   <include file="$(find mocap_simulator)/launch/qualisys_simulator.launch" />
 

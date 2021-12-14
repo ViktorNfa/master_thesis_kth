@@ -31,7 +31,7 @@ import numpy as np
 from scipy.optimize import minimize, LinearConstraint
 
 
-class K3CBFExtraHuIL():
+class KCBFHuIL():
     #=====================================
     #         Class constructor
     #  Initializes node and subscribers
@@ -41,7 +41,7 @@ class K3CBFExtraHuIL():
         # Initialisation 
         #----------------
         #Initialize node
-        rospy.init_node('k3_cbf_extra_huil')
+        rospy.init_node('k_cbf_guil')
 
         #Get the robots number from parameters
         robots_number = rospy.get_param('/robots_number')
@@ -53,9 +53,9 @@ class K3CBFExtraHuIL():
         for i in range(number_robots):
             A_arena[4*i:4*i+4, 2*i:2*i+2] = As
         b_arena = np.zeros((number_robots*4))
-        xmax = 2.25
-        xmin = -2.25
-        ymax = 3
+        xmax = 2
+        xmin = -1.4
+        ymax = 1.8
         ymin = -3
 
         #Get neighbour numbers from parameters
@@ -89,6 +89,8 @@ class K3CBFExtraHuIL():
         #Maximum/minimum safe distance for CBF
         safe_distance_cm = rospy.get_param('/safe_distance_cm')
         safe_distance_oa = rospy.get_param('/safe_distance_oa')
+        if safe_distance_oa < 2*0.27:
+            safe_distance_oa = 2*0.27
 
         #See if HuIL controller is activated and which robot it affects
         huil = rospy.get_param('/huil')
@@ -126,7 +128,7 @@ class K3CBFExtraHuIL():
 
         #Setup robot pose subscriber
         for i in range(number_robots):
-            rospy.Subscriber("/qualisys/nexus"+str(robots_number[i])+"/pose", geometry_msgs.msg.PoseStamped, self.robot_pose_callback, i)
+            rospy.Subscriber("/qualisys/nexus"+str(robots_number[i]-1)+"/pose", geometry_msgs.msg.PoseStamped, self.robot_pose_callback, i)
         
         #Setup HuIL controller subscriber
         rospy.Subscriber("/HuIL/key_vel", geometry_msgs.msg.Twist, self.huil_callback)
@@ -134,7 +136,7 @@ class K3CBFExtraHuIL():
         #Setup velocity command publisher
         vel_pub = []
         for i in range(number_robots):
-            vel_pub.append(rospy.Publisher("/nexus"+str(robots_number[i])+"/cmd_vel", geometry_msgs.msg.Twist, queue_size=100))
+            vel_pub.append(rospy.Publisher("/nexus"+str(robots_number[i]-1)+"/cmd_vel", geometry_msgs.msg.Twist, queue_size=100))
 
         #Setup cbf functions publisher
         cbf_cm_pub = []
@@ -164,8 +166,8 @@ class K3CBFExtraHuIL():
             tf_listener.append(tf2_ros.TransformListener(tf_buffer[i]))
         
             #Wait for transform to be available
-            while not tf_buffer[i].can_transform('mocap', "nexus"+str(robots_number[i]), rospy.Time()):
-                rospy.loginfo("Wait for transform to be available for nexus"+str(robots_number[i]))
+            while not tf_buffer[i].can_transform('mocap', "nexus"+str(robots_number[i]-1), rospy.Time()):
+                rospy.loginfo("Wait for transform to be available for nexus"+str(robots_number[i]-1))
                 rospy.sleep(1)
 
         #Create a ROS Twist message for velocity command
@@ -220,14 +222,16 @@ class K3CBFExtraHuIL():
                 #------------------------------------
                 u_nom = np.dot(-L_G, dist_p)
                 u_nom_heading = np.dot(-L_G, heading)
+                #In case mecanum-wheels friction is causing unwanted rotations
+                u_nom_heading[human_robot-1] = - heading[human_robot-1]
 
                 #Convert nominal controller to CBF controller format and add HuIL
                 u_n = np.zeros((number_robots*n))
                 for i in range(number_robots):
                     #For the robot controlled with HuIL
                     if i == human_robot-1:
-                        u_n[2*i] = huil*self.vel_huil.linear.x
-                        u_n[2*i+1] = huil*self.vel_huil.angular.z
+                        u_n[2*i] = huil*self.vel_huil.linear.x + u_nom[i, 0]
+                        u_n[2*i+1] = huil*self.vel_huil.angular.z + u_nom[i, 1]
                     else:
                         u_n[2*i] = u_nom[i, 0]
                         u_n[2*i+1] = u_nom[i, 1]
@@ -317,7 +321,7 @@ class K3CBFExtraHuIL():
                 vel_cmd_msg_transformed = []
                 for i in range(number_robots):
                     #Get transform from mocap frame to robot frame
-                    transform.append(tf_buffer[i].lookup_transform('mocap', "nexus"+str(robots_number[i]), rospy.Time()))
+                    transform.append(tf_buffer[i].lookup_transform('mocap', "nexus"+str(robots_number[i]-1), rospy.Time()))
                     #
                     vel_cmd_msg_transformed.append(transform_twist(vel_cmd_msg[i], transform[i]))
                     #Publish cmd message
@@ -394,7 +398,7 @@ def transform_twist(twist= geometry_msgs.msg.Twist, transform_stamped = geometry
 #               Main
 #=====================================
 if __name__ == "__main__":
-    k3_cbf_huil = K3CBFExtraHuIL()
+    k3_cbf_huil = KCBFHuIL()
     try:
         rospy.spin()
     except ValueError as e:

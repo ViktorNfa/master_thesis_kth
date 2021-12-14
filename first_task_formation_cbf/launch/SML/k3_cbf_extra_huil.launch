@@ -1,6 +1,10 @@
 <?xml version="1.0"?>
 <launch>
+  <!-- For SML testing -->
+  <!-- <arg name="use_sim_time" default="false" /> -->
+  <!-- For simulation -->
   <arg name="use_sim_time" default="true" />
+
   <arg name="gui" default="true" />
   <arg name="headless" default="false" />
 
@@ -26,43 +30,53 @@
   <param name="cbf_oa" value="1"/>
 
   <!-- Safe distance for communication maintenance and obstacle avoidance -->
-  <param name="safe_distance_cm" value="1.5"/>
-  <param name="safe_distance_oa" value="0.9"/>
+  <param name="safe_distance_cm" value="1.0"/>
+  <param name="safe_distance_oa" value="0.5"/>
 
   <!-- Variable to determine if HuIL is active or not (1 is activated/0 is deactivated) as well as the robot it affects -->
+  <!-- Additionally the HuIL robot will be also the extra one -->
   <param name="huil" value="1"/>
-  <param name="human_robot" value="3"/>
+  <param name="human_robot" value="4"/>
 
+  <!-- Nexus 0  -->
+  <group ns="nexus0">
+    <!-- Load robot description -->
+    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
+    <!-- Spawn the robot -->
+    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
+      args="-urdf -model nexus0 -param robot_description -x -2 -y 0.5 -z 0.5" />
+  </group>
+    
   <!-- Nexus 1  -->
   <group ns="nexus1">
     <!-- Load robot description -->
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus1 -param robot_description -x -2 -y 0.5 -z 0.5" />
+      args="-urdf -model nexus1 -param robot_description -x -0.5 -y 1.7 -z 0.5" />
   </group>
-    
+
   <!-- Nexus 2  -->
   <group ns="nexus2">
     <!-- Load robot description -->
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus2 -param robot_description -x -0.5 -y 1.7 -z 0.5" />
+      args="-urdf -model nexus2 -param robot_description -x 0 -y -1 -z 0.5" />
   </group>
 
-  <!-- Nexus 3  -->
+    <!-- Nexus 3  -->
   <group ns="nexus3">
     <!-- Load robot description -->
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus3 -param robot_description -x 0 -y -1 -z 0.5" />
+      args="-urdf -model nexus3 -param robot_description -x 2.3 -y -1 -z 0.5" />
   </group>
 
   <!-- Centralized auto node -->
   <group ns="Auto">
-    <node name="k_cbf_huil" pkg="first_task_formation_cbf" type="k_cbf_huil.py" output="screen" >
+    <node name="k_cbf_extra_huil" pkg="first_task_formation_cbf" type="k_cbf_extra_huil.py" output="screen" >
     </node>
   </group>
 
@@ -77,6 +91,7 @@
   </group>
 
   <!-- Logger node -->
+  <!--
   <group ns="Logger">
     <node name="logger" pkg="first_task_formation_cbf" type="logger.py" output="screen" >
       <param name="show_motion" value="1"/>
@@ -87,7 +102,10 @@
       <param name="huil_controller_filename" value="/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/huil_controller_log.csv"/>
     </node>
   </group>
+  -->
 
+  <!-- Motion capture system SML -->
+  <!-- <include file="$(find mocap_qualisys)/launch/qualisys.launch" /> -->
   <!-- Motion capture system simulation -->
   <include file="$(find mocap_simulator)/launch/qualisys_simulator.launch" />
 

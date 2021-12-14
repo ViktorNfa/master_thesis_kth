@@ -31,7 +31,7 @@ import numpy as np
 from scipy.optimize import minimize, LinearConstraint
 
 
-class KCBFHuIL():
+class CBFFormationControllerCentralized():
     #=====================================
     #         Class constructor
     #  Initializes node and subscribers
@@ -41,22 +41,11 @@ class KCBFHuIL():
         # Initialisation 
         #----------------
         #Initialize node
-        rospy.init_node('k_cbf_guil')
+        rospy.init_node('cbf_formation_controller_centralized')
 
         #Get the robots number from parameters
         robots_number = rospy.get_param('/robots_number')
         number_robots = len(robots_number)
-
-        # Create safety constraint for arena
-        As = np.array([[-1, 0], [1, 0], [0, -1], [0, 1]])
-        A_arena = np.zeros((number_robots*4, number_robots*2))
-        for i in range(number_robots):
-            A_arena[4*i:4*i+4, 2*i:2*i+2] = As
-        b_arena = np.zeros((number_robots*4))
-        xmax = 2.25
-        xmin = -2.25
-        ymax = 3
-        ymin = -3
 
         #Get neighbour numbers from parameters
         neighbours = rospy.get_param('/neighbours')
@@ -89,6 +78,8 @@ class KCBFHuIL():
         #Maximum/minimum safe distance for CBF
         safe_distance_cm = rospy.get_param('/safe_distance_cm')
         safe_distance_oa = rospy.get_param('/safe_distance_oa')
+        if safe_distance_oa < 2*0.27:
+            safe_distance_oa = 2*0.27
 
         #See if HuIL controller is activated and which robot it affects
         huil = rospy.get_param('/huil')
@@ -150,8 +141,8 @@ class KCBFHuIL():
         nom_controller_pub = []
         controller_pub = []
         for i in range(number_robots):
-            nom_controller_pub.append(rospy.Publisher("/nom_controller"+str(i+1), geometry_msgs.msg.Vector3, queue_size=100))
-            controller_pub.append(rospy.Publisher("/controller"+str(i+1), geometry_msgs.msg.Vector3, queue_size=100))
+            nom_controller_pub.append(rospy.Publisher("/nom_controller"+str(robots_number[i]), geometry_msgs.msg.Vector3, queue_size=100))
+            controller_pub.append(rospy.Publisher("/controller"+str(robots_number[i]), geometry_msgs.msg.Vector3, queue_size=100))
         #Setup message type
         nom_controller_msg = geometry_msgs.msg.Vector3()
         controller_msg = geometry_msgs.msg.Vector3()
@@ -262,20 +253,12 @@ class KCBFHuIL():
                     A_oa[i, 2*aux_i:2*aux_i+2] = grad_h_value_oa
                     A_oa[i, 2*aux_j:2*aux_j+2] = -grad_h_value_oa
 
-                #Calculate CBF for arena safety
-                for i in range(number_robots):
-                    b_arena[4*i] = xmax - p[i, 0]
-                    b_arena[4*i+1] = p[i, 0] - xmin
-                    b_arena[4*i+2] = ymax - p[i, 1]
-                    b_arena[4*i+3] = p[i, 1] - ymin
-
                 #----------------------------
                 # Solve minimization problem
                 #----------------------------
                 #Define linear constraints
                 constraint_cm = LinearConstraint(A_cm*cbf_cm, lb=-b_cm*cbf_cm, ub=np.inf)
                 constraint_oa = LinearConstraint(A_oa*cbf_oa, lb=-b_oa*cbf_oa, ub=np.inf)
-                constraint_arena = LinearConstraint(A_arena, lb=-b_arena, ub=np.inf)
                 
                 #Define objective function
                 def objective_function(u, u_n):
@@ -286,7 +269,7 @@ class KCBFHuIL():
                     objective_function,
                     x0=u_n,
                     args=(u_n,),
-                    constraints=[constraint_cm, constraint_oa, constraint_arena],
+                    constraints=[constraint_cm, constraint_oa],
                 )
 
                 #-------------
@@ -394,7 +377,7 @@ def transform_twist(twist= geometry_msgs.msg.Twist, transform_stamped = geometry
 #               Main
 #=====================================
 if __name__ == "__main__":
-    k3_cbf_huil = KCBFHuIL()
+    cbf_follower_controller_centralized = CBFFormationControllerCentralized()
     try:
         rospy.spin()
     except ValueError as e:
