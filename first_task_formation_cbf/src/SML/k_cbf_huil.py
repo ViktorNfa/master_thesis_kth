@@ -103,7 +103,7 @@ class KCBFHuIL():
         gains = (1, 1, 1)
 
         #CBF constraint parameters
-        alfa = 1
+        alfa = 2
 
         #Init robot pose
         self.robot_pose = []
@@ -221,9 +221,10 @@ class KCBFHuIL():
                 # Compute nominal (auto) controllers
                 #------------------------------------
                 u_nom = np.dot(-L_G, dist_p)
-                u_nom_heading = np.dot(-L_G, heading)
-                #In case mecanum-wheels friction is causing unwanted rotations
-                u_nom_heading[human_robot-1] = - heading[human_robot-1]
+                #For pointing in the same direction
+                # u_nom_heading = np.dot(-L_G, heading)
+                #In case mecanum-wheels friction is causing unwanted rotations (all of them pointing forward)
+                u_nom_heading = -heading
 
                 #Convert nominal controller to CBF controller format and add HuIL
                 u_n = np.zeros((number_robots*n))

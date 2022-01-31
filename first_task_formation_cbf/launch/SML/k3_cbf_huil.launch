@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <launch>
   <!-- For SML testing -->
-  <!-- <arg name="use_sim_time" default="false" /> -->
+  <arg name="use_sim_time" default="false" />
   <!-- For simulation -->
-  <arg name="use_sim_time" default="true" />
+  <!-- <arg name="use_sim_time" default="true" /> -->
 
   <arg name="gui" default="true" />
   <arg name="headless" default="false" />
@@ -93,8 +93,8 @@
   </group>
 
   <!-- Motion capture system SML -->
-  <!-- <include file="$(find mocap_qualisys)/launch/qualisys.launch" /> -->
+  <include file="$(find mocap_qualisys)/launch/qualisys.launch" />
   <!-- Motion capture system simulation -->
-  <include file="$(find mocap_simulator)/launch/qualisys_simulator.launch" />
+  <!-- <include file="$(find mocap_simulator)/launch/qualisys_simulator.launch" /> -->
 
 </launch>

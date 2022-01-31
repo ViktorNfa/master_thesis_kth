@@ -8,6 +8,7 @@
 import matplotlib.pyplot as plt 
 import pandas as pd
 import numpy as np
+import time
 
 plt.style.use('fivethirtyeight')
 
@@ -102,7 +103,7 @@ if show_action:
     plt.legend([arrow1, arrow2,], ['HuIL', 'CBF-QP',])
 
     ax.plot(579, 373, '-ko')
-    for i in range(len(df_controller[controller_col[9]].iloc[starting_point:-1])):
+    for i in range(len(df_controller[controller_col[-1]].iloc[starting_point:-1])):
         arrow1.remove()
         arrow2.remove()
         ux = df_controller[controller_col[-2]].iloc[starting_point+i]
@@ -113,4 +114,5 @@ if show_action:
         arrow2 = plt.arrow(x=579, y=373, dx=-300*uy, dy=-300*ux, width=10, facecolor='blue', edgecolor='none')
         fig.canvas.draw()
         fig.canvas.flush_events()
+        time.sleep(0.02)
 

@@ -228,7 +228,10 @@ class KCBFHuILWedge():
                 # Compute nominal (auto) controllers
                 #------------------------------------
                 u_nom = np.dot(-L_G, dist_p)
-                u_nom_heading = np.dot(-L_G, heading)
+                #For pointing in the same direction
+                # u_nom_heading = np.dot(-L_G, heading)
+                #In case mecanum-wheels friction is causing unwanted rotations (all of them pointing forward)
+                u_nom_heading = -heading
 
                 #Convert nominal controller to CBF controller format and add HuIL
                 u_n = np.zeros((number_robots*n))

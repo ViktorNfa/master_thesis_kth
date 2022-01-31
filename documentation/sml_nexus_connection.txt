@@ -1,0 +1,5 @@
+nexus0 - IP:12.0.5.7 - ssh with nvidia
+nexus1 - IP:12.0.4.5 - ssh with nexus
+nexus2 - IP:12.0.5.5 - ssh with nvidia
+
+pwd: SML4admin.

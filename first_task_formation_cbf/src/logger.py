@@ -122,7 +122,7 @@ class CBFLogger():
             ax = fig.add_subplot(111)
             img = plt.imread("/home/viktornfa/catkin_ws/src/master_thesis_victor/first_task_formation_cbf/src/nexus.png")
             ax.imshow(img)
-            ax.set_title("HuIL controller and CBF-QP controller output for Robot "+str(human_robot))
+            ax.set_title("HuIL controller and CBF-QP controller output for Robot "+str(human_robot-1))
             ax.axis('off')
 
             arrow1 = plt.arrow(x=579, y=373, dx=500*0, dy=500*0, width=10, facecolor='red', edgecolor='none')
