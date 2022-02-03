@@ -5,6 +5,6 @@ function u = formationController(L, p, pd)
     L_ext = kron(L,I);
 
     % Compute formation controller
-    u = -L*(p-pd);
+    u = -L_ext*(p-pd);
 
 end
