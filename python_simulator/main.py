@@ -6,13 +6,13 @@
 #           (vnfa@kth.se)
 #=====================================
 
-from re import A
-import matplotlib.pyplot as plt 
 import numpy as np
-import time
+from matplotlib import pyplot as plt
+from matplotlib import animation
 
 from auxiliary import *
 
+plt.style.use("seaborn-whitegrid")
 
 ## Parameter setup
 
@@ -24,7 +24,7 @@ x_max = 20
 y_max = 20
 
 # Robot size/diameter (modelled as a circle with a directional arrow)
-d_robot = 1
+d_robot = 0.3
 
 # Frequency of update of the simulation (in Hz)
 freq = 50
@@ -109,4 +109,30 @@ for i in range(max_time_size-1):
 
 ## Visualize trajectories
 
+fig = plt.figure()
+
+ax = plt.axes(xlim=(-x_max, x_max), ylim=(-y_max, y_max))
+patches = []
+for i in range(number_robots):
+    patches.append(plt.Circle((p[0,0], p[1,0]), d_robot, fc='b'))
+
+def init():
+    for i in range(number_robots):
+        patches[i].center = (p[2*i,0], p[2*i+1,0])
+        ax.add_patch(patches[i])
+    return patches
+
+def animate(frame):
+    for i in range(number_robots):
+        patches[i].center = (p[2*i,frame], p[2*i+1,frame])
+    return patches
+
+anim = animation.FuncAnimation(fig, animate, 
+                               init_func=init, 
+                               frames=max_time_size, 
+                               interval=1/freq*1000,
+                               blit=True,
+                               repeat=False)
+
+plt.show()
 
