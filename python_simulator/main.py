@@ -19,12 +19,16 @@ plt.style.use("seaborn-whitegrid")
 # Dimensionality of the problem
 dim = 2
 
+# Window size
+winx = 30
+winy = 30
+
 # Arena size
-x_max = 20
-y_max = 20
+x_max = winx-5
+y_max = winy-5
 
 # Robot size/diameter (modelled as a circle with a directional arrow)
-d_robot = 0.3
+d_robot = 0.5
 
 # Frequency of update of the simulation (in Hz)
 freq = 50
@@ -109,23 +113,54 @@ for i in range(max_time_size-1):
 
 ## Visualize trajectories
 
+# Start figure and axes with limits
 fig = plt.figure()
+ax = plt.axes(xlim=(-winx, winx), ylim=(-winy, winy))
 
-ax = plt.axes(xlim=(-x_max, x_max), ylim=(-y_max, y_max))
-patches = []
+# Add the limits of the arena
+arena_limit1 = plt.Line2D((-x_max, x_max), (y_max, y_max), lw=2.5, color='r')
+arena_limit2 = plt.Line2D((-x_max, x_max), (-y_max, -y_max), lw=2.5, color='r')
+arena_limit3 = plt.Line2D((x_max, x_max), (-y_max, y_max), lw=2.5, color='r')
+arena_limit4 = plt.Line2D((-x_max, -x_max), (-y_max, y_max), lw=2.5, color='r')
+plt.gca().add_line(arena_limit1)
+plt.gca().add_line(arena_limit2)
+plt.gca().add_line(arena_limit3)
+plt.gca().add_line(arena_limit4)
+
+shapes = []
 for i in range(number_robots):
-    patches.append(plt.Circle((p[0,0], p[1,0]), d_robot, fc='b'))
+    shapes.append(plt.Circle((p[2*i,0], p[2*i+1,0]), d_robot, fc='b'))
+
+for i in range(len(edges)):
+    aux_i = edges[i][0]-1
+    aux_j = edges[i][1]-1
+    shapes.append(plt.Line2D((p[2*aux_i,0], p[2*aux_j,0]), (p[2*aux_i+1,0], p[2*aux_j+1,0]), lw=0.5, color='b', alpha=0.3))
 
 def init():
     for i in range(number_robots):
-        patches[i].center = (p[2*i,0], p[2*i+1,0])
-        ax.add_patch(patches[i])
-    return patches
+        shapes[i].center = (p[2*i,0], p[2*i+1,0])
+        ax.add_patch(shapes[i])
+
+    for i in range(len(edges)):
+        aux_i = edges[i][0]-1
+        aux_j = edges[i][1]-1
+        shapes[number_robots+i].set_xdata((p[2*aux_i,0], p[2*aux_j,0]))
+        shapes[number_robots+i].set_ydata((p[2*aux_i+1,0], p[2*aux_j+1,0]))
+        ax.add_line(shapes[number_robots+i])
+
+    return shapes
 
 def animate(frame):
     for i in range(number_robots):
-        patches[i].center = (p[2*i,frame], p[2*i+1,frame])
-    return patches
+        shapes[i].center = (p[2*i,frame], p[2*i+1,frame])
+
+    for i in range(len(edges)):
+        aux_i = edges[i][0]-1
+        aux_j = edges[i][1]-1
+        shapes[number_robots+i].set_xdata((p[2*aux_i,frame], p[2*aux_j,frame]))
+        shapes[number_robots+i].set_ydata((p[2*aux_i+1,frame], p[2*aux_j+1,frame]))
+    
+    return shapes
 
 anim = animation.FuncAnimation(fig, animate, 
                                init_func=init, 
