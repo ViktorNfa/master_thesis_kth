@@ -14,3 +14,6 @@ A Python-based simulator for 2D multi-robot systems created to simulate the algo
 
 ### 3. [STL Platooning](location of documentation) 
 Using STL grammar and the previously explored centralized CBF algorithms to define temporal tasks related to platooning. Two platoons will merge on one line while advancing in a pre-determined direction with a speed defined by HuIL.
+
+### 4. [Satellite constellation control and visibility constraint](location of documentation) 
+Using a multi-agent system representing a satellite constellation, a custom controller was created based on a nominal controller -in charge of maximizing the coverage around the Earth for each satellite- and a safety constraint -based on the visibility of each pair satellites, so that the Earth is not blocking them. This is simulated using a MATLAB simulator.
