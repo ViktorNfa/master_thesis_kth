@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+
+# To force int division to floats (for Python 2.7)
+from __future__ import division
+
 import numpy as np
 from scipy.optimize import minimize, LinearConstraint
 
@@ -16,7 +20,7 @@ def formationController(L_G, p, p_d):
 
 def huilController(u_nom, huil, human_robot, i, max_time_size):
     # HuIL parameters
-    v_huil = 3
+    v_huil = 6
     division = 6
 
     # Leave some time at the start and the end to allow the robots to form
@@ -96,6 +100,116 @@ def cbfController(p, u_n, cm, oa, d_cm, d_oa, number_robots, edges, n, alpha):
         x0=u_n,
         args=(u_n,),
         constraints=[constraint_cm, constraint_oa],
+    )
+
+    return u.x
+
+def cbfControllerWArena(p, u_n, cm, oa, d_cm, d_oa, number_robots, edges, n, alpha, A_arena, b_arena, x_max, x_min, y_max, y_min):
+    #Create CBF constraint matrices
+    A_cm = np.zeros((len(edges), number_robots*n))
+    b_cm = np.zeros((len(edges)))
+    A_oa = np.zeros((len(edges), number_robots*n))
+    b_oa = np.zeros((len(edges)))
+    for i in range(len(edges)):
+        aux_i = edges[i][0]-1
+        aux_j = edges[i][1]-1
+        p_i = np.array([p[2*aux_i],p[2*aux_i+1]])
+        p_j = np.array([p[2*aux_j],p[2*aux_j+1]])
+
+        b_cm[i] = alpha*cbf_h(p_i, p_j, d_cm, 1)
+        b_oa[i] = alpha*cbf_h(p_i, p_j, d_oa, -1)
+
+        grad_h_value_cm = np.transpose(cbf_gradh(p_i, p_j, 1))
+        grad_h_value_oa = np.transpose(cbf_gradh(p_i, p_j, -1))
+
+        A_cm[i, 2*aux_i:2*aux_i+2] = grad_h_value_cm
+        A_cm[i, 2*aux_j:2*aux_j+2] = -grad_h_value_cm
+        A_oa[i, 2*aux_i:2*aux_i+2] = grad_h_value_oa
+        A_oa[i, 2*aux_j:2*aux_j+2] = -grad_h_value_oa
+
+    #Calculate CBF for arena safety
+    for i in range(number_robots):
+        b_arena[4*i] = alpha*(x_max - p[2*i])
+        b_arena[4*i+1] = alpha*(p[2*i] - x_min)
+        b_arena[4*i+2] = alpha*(y_max - p[2*i+1])
+        b_arena[4*i+3] = alpha*(p[2*i+1] - y_min)
+
+    #----------------------------
+    # Solve minimization problem
+    #----------------------------
+    #Define linear constraints
+    constraint_cm = LinearConstraint(A_cm*cm, lb=-b_cm*cm, ub=np.inf)
+    constraint_oa = LinearConstraint(A_oa*oa, lb=-b_oa*oa, ub=np.inf)
+    constraint_arena = LinearConstraint(A_arena, lb=-b_arena, ub=np.inf)
+    
+    #Define objective function
+    def objective_function(u, u_n):
+        return np.linalg.norm(u - u_n)**2
+    
+    #Construct the problem
+    u = minimize(
+        objective_function,
+        x0=u_n,
+        args=(u_n,),
+        constraints=[constraint_cm, constraint_oa, constraint_arena],
+    )
+
+    return u.x
+
+def cbfControllerWArenaWedge(p, u_n, cm, oa, d_cm, d_oa, number_robots, edges, n, alpha, A_arena, b_arena, x_max, x_min, y_max, y_min, A_wedge, b_wedge):
+    #Create CBF constraint matrices
+    A_cm = np.zeros((len(edges), number_robots*n))
+    b_cm = np.zeros((len(edges)))
+    A_oa = np.zeros((len(edges), number_robots*n))
+    b_oa = np.zeros((len(edges)))
+    for i in range(len(edges)):
+        aux_i = edges[i][0]-1
+        aux_j = edges[i][1]-1
+        p_i = np.array([p[2*aux_i],p[2*aux_i+1]])
+        p_j = np.array([p[2*aux_j],p[2*aux_j+1]])
+
+        b_cm[i] = alpha*cbf_h(p_i, p_j, d_cm, 1)
+        b_oa[i] = alpha*cbf_h(p_i, p_j, d_oa, -1)
+
+        grad_h_value_cm = np.transpose(cbf_gradh(p_i, p_j, 1))
+        grad_h_value_oa = np.transpose(cbf_gradh(p_i, p_j, -1))
+
+        A_cm[i, 2*aux_i:2*aux_i+2] = grad_h_value_cm
+        A_cm[i, 2*aux_j:2*aux_j+2] = -grad_h_value_cm
+        A_oa[i, 2*aux_i:2*aux_i+2] = grad_h_value_oa
+        A_oa[i, 2*aux_j:2*aux_j+2] = -grad_h_value_oa
+
+    #Calculate CBF for arena safety
+    for i in range(number_robots):
+        b_arena[4*i] = alpha*(x_max - p[2*i])
+        b_arena[4*i+1] = alpha*(p[2*i] - x_min)
+        b_arena[4*i+2] = alpha*(y_max - p[2*i+1])
+        b_arena[4*i+3] = alpha*(p[2*i+1] - y_min)
+
+    #Calculate CBF for wedge
+    for i in range(number_robots):
+        b_wedge[2*i] = alpha*(-y_max/(2*x_max)*p[2*i] + y_max/2 - p[2*i+1])
+        b_wedge[2*i+1] = alpha*(p[2*i+1] - y_max/(2*x_max)*p[2*i] + y_max/2)
+
+    #----------------------------
+    # Solve minimization problem
+    #----------------------------
+    #Define linear constraints
+    constraint_cm = LinearConstraint(A_cm*cm, lb=-b_cm*cm, ub=np.inf)
+    constraint_oa = LinearConstraint(A_oa*oa, lb=-b_oa*oa, ub=np.inf)
+    constraint_arena = LinearConstraint(A_arena, lb=-b_arena, ub=np.inf)
+    constraint_wedge = LinearConstraint(A_wedge, lb=-b_wedge, ub=np.inf)
+    
+    #Define objective function
+    def objective_function(u, u_n):
+        return np.linalg.norm(u - u_n)**2
+    
+    #Construct the problem
+    u = minimize(
+        objective_function,
+        x0=u_n,
+        args=(u_n,),
+        constraints=[constraint_cm, constraint_oa, constraint_arena, constraint_wedge],
     )
 
     return u.x

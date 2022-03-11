@@ -42,19 +42,19 @@ freq = 50
 max_T = 100
 
 # Ideal formation positions
-#formation_positions = [[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]
-formation_positions = [[0, 10], [0, 8], [0, 6], [0, 4], [0, 2], [0, 0], [0, -2], [0, -4], [0, -6], [0, -8], [0, -10], 
-                        [10, 10], [8, 8], [6, 6], [4, 4], [2, 2], [2, -2], [4, -4], [6, -6], [8, -8], [10, -10]]
+formation_positions = [[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]
+#formation_positions = [[0, 10], [0, 8], [0, 6], [0, 4], [0, 2], [0, 0], [0, -2], [0, -4], [0, -6], [0, -8], [0, -10], 
+#                        [10, 10], [8, 8], [6, 6], [4, 4], [2, 2], [2, -2], [4, -4], [6, -6], [8, -8], [10, -10]]
 
 # Get the number of robots
 number_robots = len(formation_positions)
 
 # List of neighbours for each robot
-#neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
+neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
 #neighbours = [[2, 4], [1, 3, 4, 5], [2, 5], [1, 2], [2, 3]]
 #neighbours = [[2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7, 16, 17], [6, 8], [7, 9], [8, 10], [9, 11], [10], 
 #               [13], [12, 14], [13, 15], [14, 16], [6, 15], [6, 18], [17, 19], [18, 20], [19, 21], [20]]
-neighbours = [[i+1 for i in range(number_robots) if i != j] for j in range(number_robots)]
+#neighbours = [[i+1 for i in range(number_robots) if i != j] for j in range(number_robots)]
 
 # CBF Communication maintenance or obstacle avoidance activation 
 # (1 is activated/0 is deactivated)
@@ -71,7 +71,8 @@ alpha = 1
 # Variable to determine if HuIL is active or not 
 # (1 is activated/0 is deactivated) as well as the robot it affects
 huil = 1
-human_robot = 21
+human_robot = 5
+#human_robot = 21
 
 
 ## Pre-calculations needed for controller and simulation
@@ -98,6 +99,20 @@ for i in range(number_robots):
         if (i+1,j) not in edges and (j,i+1) not in edges:
             edges.append((i+1,j))
 
+# Create safety constraint for arena
+As = np.array([[-1, 0], [1, 0], [0, -1], [0, 1]])
+A_arena = np.zeros((number_robots*4, number_robots*2))
+for i in range(number_robots):
+    A_arena[4*i:4*i+4, 2*i:2*i+2] = As
+b_arena = np.zeros((number_robots*4))
+
+#Create wedge CBF
+Aw = np.array([[-y_max/(2*x_max), -1], [-y_max/(2*x_max), 1]])
+A_wedge = np.zeros((number_robots*2, number_robots*2))
+for i in range(number_robots):
+    A_wedge[2*i:2*i+2, 2*i:2*i+2] = Aw
+b_wedge = np.zeros((number_robots*2))
+
 
 ## Simulation and visualization loop
 
@@ -111,14 +126,16 @@ p[:,0] = x_max*np.random.rand(number_robots*dim)-x_max/2
 
 # Start simulation loop
 for i in range(max_time_size-1):
-    # Compute nominal controller
+    # Compute nominal controller - Centralized and Distributed
     u_nom = formationController(L_G, p[:,i], p_d)
 
     # Add HuIL controll
     u_n = huilController(u_nom, huil, human_robot, i, max_time_size)
 
-    # Compute CBF constrained controller
-    u = cbfController(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha)
+    # Compute CBF constrained controller (w and w/out arena safety, wedge shape or extra robot) - Centralized and Distributed
+    #u = cbfController(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha)
+    #u = cbfControllerWArena(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max)
+    u = cbfControllerWArenaWedge(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max, A_wedge, b_wedge)
 
     # Update the system using dynamics
     pdot = systemDynamics(p[:,i], u)
@@ -140,6 +157,12 @@ plt.gca().add_line(arena_limit1)
 plt.gca().add_line(arena_limit2)
 plt.gca().add_line(arena_limit3)
 plt.gca().add_line(arena_limit4)
+
+# Add wedge limits (OPTIONAL)
+wedge1 = plt.Line2D((-x_max, x_max), (y_max, 0), lw=1, color='r', alpha=0.7)
+wedge2 = plt.Line2D((-x_max, x_max), (-y_max, 0), lw=1, color='r', alpha=0.7)
+plt.gca().add_line(wedge1)
+plt.gca().add_line(wedge2)
 
 shapes = []
 for i in range(number_robots):
