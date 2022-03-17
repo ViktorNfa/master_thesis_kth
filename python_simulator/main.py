@@ -13,6 +13,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import animation
 from scipy.optimize import minimize, LinearConstraint
+from tqdm import tqdm
 
 from auxiliary import *
 
@@ -32,29 +33,29 @@ winy = 30
 x_max = winx-5
 y_max = winy-5
 
-# Robot size/diameter (modelled as a circle with a directional arrow)
-d_robot = 0.5
+# Robot size/radius (modelled as a circle with a directional arrow)
+r_robot = 0.5
 
 # Frequency of update of the simulation (in Hz)
 freq = 50
 
 # Maximum time of the simulation (in seconds)
-max_T = 100
+max_T = 60
 
 # Ideal formation positions
-formation_positions = [[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]
-#formation_positions = [[0, 10], [0, 8], [0, 6], [0, 4], [0, 2], [0, 0], [0, -2], [0, -4], [0, -6], [0, -8], [0, -10], 
-#                        [10, 10], [8, 8], [6, 6], [4, 4], [2, 2], [2, -2], [4, -4], [6, -6], [8, -8], [10, -10]]
+#formation_positions = [[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]
+formation_positions = [[0, 10], [0, 8], [0, 6], [0, 4], [0, 2], [0, 0], [0, -2], [0, -4], [0, -6], [0, -8], [0, -10], 
+                        [10, 10], [8, 8], [6, 6], [4, 4], [2, 2], [2, -2], [4, -4], [6, -6], [8, -8], [10, -10]]
 
 # Get the number of robots
 number_robots = len(formation_positions)
 
 # List of neighbours for each robot
-neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
+#neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
 #neighbours = [[2, 4], [1, 3, 4, 5], [2, 5], [1, 2], [2, 3]]
 #neighbours = [[2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7, 16, 17], [6, 8], [7, 9], [8, 10], [9, 11], [10], 
 #               [13], [12, 14], [13, 15], [14, 16], [6, 15], [6, 18], [17, 19], [18, 20], [19, 21], [20]]
-#neighbours = [[i+1 for i in range(number_robots) if i != j] for j in range(number_robots)]
+neighbours = [[i+1 for i in range(number_robots) if i != j] for j in range(number_robots)]
 
 # CBF Communication maintenance or obstacle avoidance activation 
 # (1 is activated/0 is deactivated)
@@ -71,8 +72,17 @@ alpha = 1
 # Variable to determine if HuIL is active or not 
 # (1 is activated/0 is deactivated) as well as the robot it affects
 huil = 1
-human_robot = 5
-#human_robot = 21
+human_robot = number_robots
+
+# HuIL parameters
+v_huil = 2.5
+division = 6
+
+# Parameter to decide if wedge is shown or not
+wedge = False
+
+# Parameter to decide if Extra robot is shown or not
+extra_robot = True
 
 
 ## Pre-calculations needed for controller and simulation
@@ -106,12 +116,16 @@ for i in range(number_robots):
     A_arena[4*i:4*i+4, 2*i:2*i+2] = As
 b_arena = np.zeros((number_robots*4))
 
-#Create wedge CBF
+# Create safety constraint for wedge shape
 Aw = np.array([[-y_max/(2*x_max), -1], [-y_max/(2*x_max), 1]])
 A_wedge = np.zeros((number_robots*2, number_robots*2))
 for i in range(number_robots):
     A_wedge[2*i:2*i+2, 2*i:2*i+2] = Aw
 b_wedge = np.zeros((number_robots*2))
+
+# Create safety constraint for extra robot
+A_extra = np.zeros((number_robots, number_robots*dim))
+b_extra = np.zeros((number_robots))
 
 
 ## Simulation and visualization loop
@@ -121,32 +135,55 @@ max_time_size = max_T*freq
 # Initialize position matrix
 p = np.zeros((number_robots*dim,max_time_size))
 
+# Initialize position for extra robot
+huil_p = np.zeros((dim,max_time_size))
+
 # Randomize initial position
 p[:,0] = x_max*np.random.rand(number_robots*dim)-x_max/2
 
+# Random initial position for extra robot
+huil_p[:,0] = np.array([-5, 20])
+
 # Start simulation loop
-for i in range(max_time_size-1):
+print("Computing evolution of the system...")
+for i in tqdm(range(max_time_size-1)):
     # Compute nominal controller - Centralized and Distributed
     u_nom = formationController(L_G, p[:,i], p_d)
 
     # Add HuIL controll
-    u_n = huilController(u_nom, huil, human_robot, i, max_time_size)
+    if extra_robot:
+        u_n = u_nom
+    else:
+        u_n = huilController(u_nom, huil, human_robot, i, max_time_size, v_huil, division)
 
     # Compute CBF constrained controller (w and w/out arena safety, wedge shape or extra robot) - Centralized and Distributed
-    #u = cbfController(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha)
-    #u = cbfControllerWArena(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max)
-    u = cbfControllerWArenaWedge(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max, A_wedge, b_wedge)
+    if extra_robot:
+        u = cbfControllerWArenaExtra(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max, A_extra, b_extra, d_oa, huil_p[:,i], v_huil, v_huil)
+    elif wedge:
+        u = cbfControllerWArenaWedge(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max, A_wedge, b_wedge)
+    else:
+        #u = cbfController(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha)
+        u = cbfControllerWArena(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max)
 
     # Update the system using dynamics
     pdot = systemDynamics(p[:,i], u)
     p[:,i+1] = pdot*(1/freq) + p[:,i]
-    
+
+    # Update extra robot (if applicable)
+    if extra_robot:
+        huil_pdot = extraRobotDynamics(i, max_time_size, v_huil, division)
+        huil_p[:,i+1] = huil_pdot*(1/freq) + huil_p[:,i]
+
 
 ## Visualize trajectories
+
+print("Showing animation...")
 
 # Start figure and axes with limits
 fig = plt.figure()
 ax = plt.axes(xlim=(-winx, winx), ylim=(-winy, winy))
+
+time_txt = ax.text(0.475, 0.975,'',horizontalalignment='left',verticalalignment='top', transform=ax.transAxes)
 
 # Add the limits of the arena
 arena_limit1 = plt.Line2D((-x_max, x_max), (y_max, y_max), lw=2.5, color='r')
@@ -159,19 +196,23 @@ plt.gca().add_line(arena_limit3)
 plt.gca().add_line(arena_limit4)
 
 # Add wedge limits (OPTIONAL)
-wedge1 = plt.Line2D((-x_max, x_max), (y_max, 0), lw=1, color='r', alpha=0.7)
-wedge2 = plt.Line2D((-x_max, x_max), (-y_max, 0), lw=1, color='r', alpha=0.7)
-plt.gca().add_line(wedge1)
-plt.gca().add_line(wedge2)
+if wedge:
+    wedge1 = plt.Line2D((-x_max, x_max), (y_max, 0), lw=1, color='r', alpha=0.7)
+    wedge2 = plt.Line2D((-x_max, x_max), (-y_max, 0), lw=1, color='r', alpha=0.7)
+    plt.gca().add_line(wedge1)
+    plt.gca().add_line(wedge2)
 
 shapes = []
 for i in range(number_robots):
-    shapes.append(plt.Circle((p[2*i,0], p[2*i+1,0]), d_robot, fc='b'))
+    shapes.append(plt.Circle((p[2*i,0], p[2*i+1,0]), r_robot, fc='b'))
 
 for i in range(len(edges)):
     aux_i = edges[i][0]-1
     aux_j = edges[i][1]-1
     shapes.append(plt.Line2D((p[2*aux_i,0], p[2*aux_j,0]), (p[2*aux_i+1,0], p[2*aux_j+1,0]), lw=0.5, color='b', alpha=0.3))
+
+if extra_robot:
+    shapes.append(plt.Circle((huil_p[0,0], huil_p[1,0]), r_robot, fc='g'))
 
 def init():
     for i in range(number_robots):
@@ -185,9 +226,16 @@ def init():
         shapes[number_robots+i].set_ydata((p[2*aux_i+1,0], p[2*aux_j+1,0]))
         ax.add_line(shapes[number_robots+i])
 
-    return shapes
+    if extra_robot:
+        shapes[-1].center = (huil_p[0,0], huil_p[1,0])
+        ax.add_patch(shapes[-1])
+
+    time_txt.set_text('T=0.0 s')
+
+    return shapes + [time_txt,]
 
 def animate(frame):
+
     for i in range(number_robots):
         shapes[i].center = (p[2*i,frame], p[2*i+1,frame])
 
@@ -197,7 +245,13 @@ def animate(frame):
         shapes[number_robots+i].set_xdata((p[2*aux_i,frame], p[2*aux_j,frame]))
         shapes[number_robots+i].set_ydata((p[2*aux_i+1,frame], p[2*aux_j+1,frame]))
 
-    return shapes
+    if extra_robot:
+        shapes[-1].center = (huil_p[0,frame], huil_p[1,frame])
+
+    time = frame/freq
+    time_txt.set_text('T=%.1d s' % time)
+
+    return shapes + [time_txt,]
 
 anim = animation.FuncAnimation(fig, animate, 
                                init_func=init, 
@@ -208,3 +262,4 @@ anim = animation.FuncAnimation(fig, animate,
 
 plt.show()
 
+print("Completed!")
