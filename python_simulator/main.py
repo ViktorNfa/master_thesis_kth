@@ -10,6 +10,7 @@
 from __future__ import division
 
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 from matplotlib import animation
 from scipy.optimize import minimize, LinearConstraint
@@ -89,43 +90,72 @@ extra_robot = True
 
 # Get the number of neighbours for each robot
 number_neighbours = []
+# Create edge list
+edges = []
+# Create Laplacian matrix for the graph
+L_G = np.zeros((number_robots,number_robots))
+# Create robot list for the name of columns
+robot_col = ['Time']
 for i in range(number_robots):
     number_neighbours.append(len(neighbours[i]))
+    L_G[i, i] = number_neighbours[i]
+    robot_col.append("Robot_x"+str(i+1))
+    robot_col.append("Robot_y"+str(i+1))
+    for j in neighbours[i]:
+        if (i+1,j) not in edges and (j,i+1) not in edges:
+            edges.append((i+1,j))
+            L_G[i, j-1] = -1
+
+# Create edge list for the name of columns
+edges_col = ['Time']
+for i in range(len(edges)):
+    edges_col.append("Edge"+str(edges[i]))
 
 # Modify ideal formation positions to one column vector
 p_d = np.reshape(formation_positions,number_robots*dim)
 
-#Create Laplacian matrix for the graph
-L_G = np.zeros((number_robots,number_robots))
-for i in range(number_robots):
-    L_G[i, i] = number_neighbours[i]
-    for j in neighbours[i]:
-        L_G[i, j-1] = -1
-
-#Create edge list
-edges = []
-for i in range(number_robots):
-    for j in neighbours[i]:
-        if (i+1,j) not in edges and (j,i+1) not in edges:
-            edges.append((i+1,j))
-
 # Create safety constraint for arena
 As = np.array([[-1, 0], [1, 0], [0, -1], [0, 1]])
 A_arena = np.zeros((number_robots*4, number_robots*2))
-for i in range(number_robots):
-    A_arena[4*i:4*i+4, 2*i:2*i+2] = As
-b_arena = np.zeros((number_robots*4))
-
 # Create safety constraint for wedge shape
 Aw = np.array([[-y_max/(2*x_max), -1], [-y_max/(2*x_max), 1]])
 A_wedge = np.zeros((number_robots*2, number_robots*2))
 for i in range(number_robots):
+    A_arena[4*i:4*i+4, 2*i:2*i+2] = As
     A_wedge[2*i:2*i+2, 2*i:2*i+2] = Aw
+b_arena = np.zeros((number_robots*4)) 
 b_wedge = np.zeros((number_robots*2))
 
 # Create safety constraint for extra robot
 A_extra = np.zeros((number_robots, number_robots*dim))
 b_extra = np.zeros((number_robots))
+
+
+## Initialize logging
+
+#Open files for writing the data
+global cbf_cm_filename
+cbf_cm_filename  = "cbf_cm_log.csv"
+global cbf_oa_filename
+cbf_oa_filename = "cbf_oa_log.csv"
+global controller_filename
+controller_filename = "controller_log.csv"
+global nom_controller_filename
+nom_controller_filename = "nom_controller_log.csv"
+global huil_controller_filename
+huil_controller_filename = "huil_controller_log.csv"
+
+#Create dataframes to pandas the data
+global df_cbf_cm
+df_cbf_cm = pd.DataFrame(columns=edges_col)
+global df_cbf_oa
+df_cbf_oa = pd.DataFrame(columns=edges_col)
+global df_controller
+df_controller = pd.DataFrame(columns=robot_col)
+global df_nom_controller
+df_nom_controller = pd.DataFrame(columns=robot_col)  
+global df_huil_controller
+df_huil_controller = pd.DataFrame(columns=[robot_col[0], robot_col[2*human_robot-1], robot_col[2*human_robot]]) 
 
 
 ## Simulation and visualization loop
@@ -174,8 +204,32 @@ for i in tqdm(range(max_time_size-1)):
         huil_pdot = extraRobotDynamics(i, max_time_size, v_huil, division)
         huil_p[:,i+1] = huil_pdot*(1/freq) + huil_p[:,i]
 
+    # Save data in dataframe
+    
+    # CBF functions
+    self.cbf_cm[0] = time
+    df2_cbf_cm = pd.DataFrame(np.array([self.cbf_cm]), columns=edges_col)
+    df_cbf_cm = df_cbf_cm.append(df2_cbf_cm, ignore_index=True)
+    self.cbf_oa[0] = time
+    df2_cbf_oa = pd.DataFrame(np.array([self.cbf_oa]), columns=edges_col)
+    df_cbf_oa = df_cbf_oa.append(df2_cbf_oa, ignore_index=True)
+    
+    # Final controller
+    self.controller[0] = time
+    df2_controller = pd.DataFrame(np.array([self.controller]), columns=robot_col)
+    df_controller = df_controller.append(df2_controller, ignore_index=True)
 
-## Visualize trajectories
+    # Nominal controller
+    self.nom_controller[0] = time
+    df2_nom_controller = pd.DataFrame(np.array([self.nom_controller]), columns=robot_col)
+    df_nom_controller = df_nom_controller.append(df2_nom_controller, ignore_index=True)
+
+    # HuIL controller
+    df2_huil_controller = pd.DataFrame(np.array([[time, uhuilx, uhuily]]), columns=[robot_col[0], robot_col[2*human_robot-1], robot_col[2*human_robot]])
+    df_huil_controller = df_huil_controller.append(df2_huil_controller, ignore_index=True)
+
+
+## Visualize trajectories & CBF conditions
 
 print("Showing animation...")
 
@@ -259,6 +313,57 @@ anim = animation.FuncAnimation(fig, animate,
                                interval=1/freq*1000,
                                blit=True,
                                repeat=False)
+
+plt.show()
+
+print("Showing CBF function evolution...")
+
+# Plot the CBF comunication maintenance
+cbf_cm_col = df_cbf_cm.columns.values
+starting_point = df_cbf_cm[cbf_cm_col[1]].ne(0).idxmax()
+fig_cbf_cm, ax_cbf_cm = plt.subplots()  # Create a figure and an axes.
+for i in range(len(cbf_cm_col)):
+    if i > 0:
+        ax_cbf_cm.plot(df_cbf_cm[cbf_cm_col[0]].iloc[starting_point:-1], df_cbf_cm[cbf_cm_col[i]].iloc[starting_point:-1], label=cbf_cm_col[i])  # Plot some data on the axes.
+
+ax_cbf_cm.set_xlabel('time')  # Add an x-label to the axes.
+ax_cbf_cm.set_ylabel('h_cm')  # Add a y-label to the axes.
+ax_cbf_cm.set_title("CBF functions for comunication maintenance")  # Add a title to the axes.
+ax_cbf_cm.legend()  # Add a legend.
+ax_cbf_cm.axhline(y=0, color='k', lw=1)
+
+# Plot the CBF obstacle avoidance
+cbf_oa_col = df_cbf_oa.columns.values
+fig_cbf_oa, ax_cbf_oa = plt.subplots()  # Create a figure and an axes.
+for i in range(len(cbf_oa_col)):
+    if i > 0:
+        ax_cbf_oa.plot(df_cbf_oa[cbf_oa_col[0]].iloc[starting_point:-1], df_cbf_oa[cbf_oa_col[i]].iloc[starting_point:-1], label=cbf_oa_col[i])  # Plot some data on the axes.
+
+ax_cbf_oa.set_xlabel('time')  # Add an x-label to the axes.
+ax_cbf_oa.set_ylabel('h_oa')  # Add a y-label to the axes.
+ax_cbf_oa.set_title("CBF functions for obstacle avoidance")  # Add a title to the axes.
+ax_cbf_oa.legend()  # Add a legend.
+ax_cbf_oa.axhline(y=0, color='k', lw=1)
+
+# Plot the normed difference between nominal and final controller
+controller_col = df_controller.columns.values
+fig_norm, ax_norm = plt.subplots()  # Create a figure and an axes.
+step = 1
+ax_norm.axis('on')
+for i in range(1, len(controller_col), 2):
+    if i > 0:
+        diff_x = df_controller[controller_col[i]].iloc[starting_point:-1] - df_nom_controller[controller_col[i]].iloc[starting_point:-1]
+        diff_y = df_controller[controller_col[i+1]].iloc[starting_point:-1] - df_nom_controller[controller_col[i+1]].iloc[starting_point:-1]
+        diff = np.array([diff_x, diff_y])
+        normed_difference = np.sqrt(np.square(diff).sum(axis=0))
+        ax_norm.plot(df_controller[controller_col[0]].iloc[starting_point:-1], normed_difference, label="Robot"+str(step))  # Plot some data on the axes.
+        step += 1
+
+ax_norm.set_xlabel('time')  # Add an x-label to the axes.
+ax_norm.set_ylabel('|u - u_nom|')  # Add a y-label to the axes.
+ax_norm.set_title("Normed difference between u and nominal u")  # Add a title to the axes.
+ax_norm.legend()  # Add a legend.
+ax_norm.axhline(y=0, color='k', lw=1)
 
 plt.show()
 

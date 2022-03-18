@@ -74,7 +74,7 @@ class CBFLogger():
         global huil_controller_filename
         huil_controller_filename = rospy.get_param('~huil_controller_filename')
 
-        #Create dataframes to pickle the data
+        #Create dataframes to pandas the data
         global df_cbf_cm
         df_cbf_cm = pd.DataFrame(columns=edges_col)
         global df_cbf_oa
