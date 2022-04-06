@@ -124,7 +124,7 @@ def cbfController(p, u_n, cm, oa, d_cm, d_oa, number_robots, edges, n, alpha):
         constraints=[constraint_cm, constraint_oa],
     )
 
-    return u.x
+    return u.x, b_cm, b_oa
 
 def cbfControllerWArena(p, u_n, cm, oa, d_cm, d_oa, number_robots, edges, n, alpha, A_arena, b_arena, x_max, x_min, y_max, y_min):
     #Create CBF constraint matrices
@@ -176,7 +176,7 @@ def cbfControllerWArena(p, u_n, cm, oa, d_cm, d_oa, number_robots, edges, n, alp
         constraints=[constraint_cm, constraint_oa, constraint_arena],
     )
 
-    return u.x
+    return u.x, b_cm, b_oa
 
 def cbfControllerWArenaWedge(p, u_n, cm, oa, d_cm, d_oa, number_robots, edges, n, alpha, A_arena, b_arena, x_max, x_min, y_max, y_min, A_wedge, b_wedge):
     #Create CBF constraint matrices
@@ -234,7 +234,7 @@ def cbfControllerWArenaWedge(p, u_n, cm, oa, d_cm, d_oa, number_robots, edges, n
         constraints=[constraint_cm, constraint_oa, constraint_arena, constraint_wedge],
     )
 
-    return u.x
+    return u.x, b_cm, b_oa, b_wedge
 
 def cbfControllerWArenaExtra(p, u_n, cm, oa, d_cm, d_oa, number_robots, edges, n, alpha, A_arena, b_arena, x_max, x_min, y_max, y_min, A_extra, b_extra, d_extra, huil_p, vxe, vye):
     #Create CBF constraint matrices
@@ -290,7 +290,7 @@ def cbfControllerWArenaExtra(p, u_n, cm, oa, d_cm, d_oa, number_robots, edges, n
         constraints=[constraint_cm, constraint_oa, constraint_arena, constraint_extra],
     )
 
-    return u.x
+    return u.x, b_cm, b_oa, b_extra
 
 def systemDynamics(p, u):
     # System dynamics parameters
