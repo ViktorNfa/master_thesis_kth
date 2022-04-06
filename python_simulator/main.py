@@ -109,9 +109,9 @@ for i in range(number_robots):
     robot_col.append("Robot_x"+str(i+1))
     robot_col.append("Robot_y"+str(i+1))
     for j in neighbours[i]:
+        L_G[i, j-1] = -1
         if (i+1,j) not in edges and (j,i+1) not in edges:
             edges.append((i+1,j))
-            L_G[i, j-1] = -1
     controller.append(0.)
     controller.append(0.)
     nom_controller.append(0.)
@@ -243,7 +243,74 @@ for i in tqdm(range(max_time_size-1)):
     df_huil_controller = df_huil_controller.append(df2_huil_controller, ignore_index=True)
 
 
-## Visualize trajectories & CBF conditions
+## Visualize CBF conditions/plots & trajectories
+
+print("Showing CBF function evolution...")
+
+cbf_cm_col = df_cbf_cm.columns.values
+starting_point = df_cbf_cm[cbf_cm_col[1]].ne(0).idxmax()
+if cm == 1:
+    # Plot the CBF comunication maintenance
+    fig_cbf_cm, ax_cbf_cm = plt.subplots()  # Create a figure and an axes.
+    for i in range(len(cbf_cm_col)):
+        if i > 0:
+            ax_cbf_cm.plot(df_cbf_cm[cbf_cm_col[0]].iloc[starting_point:-1], df_cbf_cm[cbf_cm_col[i]].iloc[starting_point:-1], label=cbf_cm_col[i])  # Plot some data on the axes.
+
+    ax_cbf_cm.set_xlabel('time')  # Add an x-label to the axes.
+    ax_cbf_cm.set_ylabel('h_cm')  # Add a y-label to the axes.
+    ax_cbf_cm.set_title("CBF functions for comunication maintenance")  # Add a title to the axes.
+    ax_cbf_cm.legend()  # Add a legend.
+    ax_cbf_cm.axhline(y=0, color='k', lw=1)
+
+if oa == 1:
+    # Plot the CBF obstacle avoidance
+    cbf_oa_col = df_cbf_oa.columns.values
+    fig_cbf_oa, ax_cbf_oa = plt.subplots()  # Create a figure and an axes.
+    for i in range(len(cbf_oa_col)):
+        if i > 0:
+            ax_cbf_oa.plot(df_cbf_oa[cbf_oa_col[0]].iloc[starting_point:-1], df_cbf_oa[cbf_oa_col[i]].iloc[starting_point:-1], label=cbf_oa_col[i])  # Plot some data on the axes.
+
+    ax_cbf_oa.set_xlabel('time')  # Add an x-label to the axes.
+    ax_cbf_oa.set_ylabel('h_oa')  # Add a y-label to the axes.
+    ax_cbf_oa.set_title("CBF functions for obstacle avoidance")  # Add a title to the axes.
+    ax_cbf_oa.legend()  # Add a legend.
+    ax_cbf_oa.axhline(y=0, color='k', lw=1)
+
+# Plot the normed difference between nominal and final controller
+controller_col = df_controller.columns.values
+fig_norm, ax_norm = plt.subplots()  # Create a figure and an axes.
+step = 1
+ax_norm.axis('on')
+for i in range(1, len(controller_col), 2):
+    if i > 0:
+        diff_x = df_controller[controller_col[i]].iloc[starting_point:-1] - df_nom_controller[controller_col[i]].iloc[starting_point:-1]
+        diff_y = df_controller[controller_col[i+1]].iloc[starting_point:-1] - df_nom_controller[controller_col[i+1]].iloc[starting_point:-1]
+        diff = np.array([diff_x, diff_y])
+        normed_difference = np.sqrt(np.square(diff).sum(axis=0))
+        ax_norm.plot(df_controller[controller_col[0]].iloc[starting_point:-1], normed_difference, label="Robot"+str(step))  # Plot some data on the axes.
+        step += 1
+
+if not extra_robot:
+    diff_x = df_controller[controller_col[2*human_robot-1]].iloc[starting_point:-1] - df_huil_controller[controller_col[2*human_robot-1]].iloc[starting_point:-1]
+    diff_y = df_controller[controller_col[2*human_robot]].iloc[starting_point:-1] - df_huil_controller[controller_col[2*human_robot]].iloc[starting_point:-1]
+    diff = np.array([diff_x, diff_y])
+    normed_difference = np.sqrt(np.square(diff).sum(axis=0))
+    ax_norm.plot(df_controller[controller_col[0]].iloc[starting_point:-1], normed_difference, label="HuILDiff"+str(human_robot))  # Plot some data on the axes.
+
+    huil_x = df_huil_controller[controller_col[2*human_robot-1]].iloc[starting_point:-1]
+    huil_y = df_huil_controller[controller_col[2*human_robot]].iloc[starting_point:-1]
+    huil = np.array([huil_x, huil_y])
+    normed_huil = np.sqrt(np.square(huil).sum(axis=0))
+    #ax_norm.plot(df_controller[controller_col[0]].iloc[starting_point:-1], normed_huil, label="HuIL"+str(human_robot))  # Plot some data on the axes.
+
+ax_norm.set_xlabel('time')  # Add an x-label to the axes.
+ax_norm.set_ylabel('|u - u_nom|')  # Add a y-label to the axes.
+ax_norm.set_title("Normed difference between u and nominal u")  # Add a title to the axes.
+ax_norm.legend()  # Add a legend.
+ax_norm.axhline(y=0, color='k', lw=1)
+
+plt.show()
+
 
 print("Showing animation...")
 
@@ -330,70 +397,5 @@ anim = animation.FuncAnimation(fig, animate,
 
 plt.show()
 
-print("Showing CBF function evolution...")
-
-cbf_cm_col = df_cbf_cm.columns.values
-starting_point = df_cbf_cm[cbf_cm_col[1]].ne(0).idxmax()
-if cm == 1:
-    # Plot the CBF comunication maintenance
-    fig_cbf_cm, ax_cbf_cm = plt.subplots()  # Create a figure and an axes.
-    for i in range(len(cbf_cm_col)):
-        if i > 0:
-            ax_cbf_cm.plot(df_cbf_cm[cbf_cm_col[0]].iloc[starting_point:-1], df_cbf_cm[cbf_cm_col[i]].iloc[starting_point:-1], label=cbf_cm_col[i])  # Plot some data on the axes.
-
-    ax_cbf_cm.set_xlabel('time')  # Add an x-label to the axes.
-    ax_cbf_cm.set_ylabel('h_cm')  # Add a y-label to the axes.
-    ax_cbf_cm.set_title("CBF functions for comunication maintenance")  # Add a title to the axes.
-    ax_cbf_cm.legend()  # Add a legend.
-    ax_cbf_cm.axhline(y=0, color='k', lw=1)
-
-if oa == 1:
-    # Plot the CBF obstacle avoidance
-    cbf_oa_col = df_cbf_oa.columns.values
-    fig_cbf_oa, ax_cbf_oa = plt.subplots()  # Create a figure and an axes.
-    for i in range(len(cbf_oa_col)):
-        if i > 0:
-            ax_cbf_oa.plot(df_cbf_oa[cbf_oa_col[0]].iloc[starting_point:-1], df_cbf_oa[cbf_oa_col[i]].iloc[starting_point:-1], label=cbf_oa_col[i])  # Plot some data on the axes.
-
-    ax_cbf_oa.set_xlabel('time')  # Add an x-label to the axes.
-    ax_cbf_oa.set_ylabel('h_oa')  # Add a y-label to the axes.
-    ax_cbf_oa.set_title("CBF functions for obstacle avoidance")  # Add a title to the axes.
-    ax_cbf_oa.legend()  # Add a legend.
-    ax_cbf_oa.axhline(y=0, color='k', lw=1)
-
-# Plot the normed difference between nominal and final controller
-controller_col = df_controller.columns.values
-fig_norm, ax_norm = plt.subplots()  # Create a figure and an axes.
-step = 1
-ax_norm.axis('on')
-for i in range(1, len(controller_col), 2):
-    if i > 0:
-        diff_x = df_controller[controller_col[i]].iloc[starting_point:-1] - df_nom_controller[controller_col[i]].iloc[starting_point:-1]
-        diff_y = df_controller[controller_col[i+1]].iloc[starting_point:-1] - df_nom_controller[controller_col[i+1]].iloc[starting_point:-1]
-        diff = np.array([diff_x, diff_y])
-        normed_difference = np.sqrt(np.square(diff).sum(axis=0))
-        ax_norm.plot(df_controller[controller_col[0]].iloc[starting_point:-1], normed_difference, label="Robot"+str(step))  # Plot some data on the axes.
-        step += 1
-
-if not extra_robot:
-    diff_x = df_controller[controller_col[2*human_robot-1]].iloc[starting_point:-1] - df_huil_controller[controller_col[2*human_robot-1]].iloc[starting_point:-1]
-    diff_y = df_controller[controller_col[2*human_robot]].iloc[starting_point:-1] - df_huil_controller[controller_col[2*human_robot]].iloc[starting_point:-1]
-    diff = np.array([diff_x, diff_y])
-    normed_difference = np.sqrt(np.square(diff).sum(axis=0))
-    ax_norm.plot(df_controller[controller_col[0]].iloc[starting_point:-1], normed_difference, label="HuILDiff"+str(human_robot))  # Plot some data on the axes.
-
-    huil_x = df_huil_controller[controller_col[2*human_robot-1]].iloc[starting_point:-1]
-    huil_y = df_huil_controller[controller_col[2*human_robot]].iloc[starting_point:-1]
-    huil = np.array([huil_x, huil_y])
-    normed_huil = np.sqrt(np.square(huil).sum(axis=0))
-    ax_norm.plot(df_controller[controller_col[0]].iloc[starting_point:-1], normed_huil, label="HuIL"+str(human_robot))  # Plot some data on the axes.
-
-ax_norm.set_xlabel('time')  # Add an x-label to the axes.
-ax_norm.set_ylabel('|u - u_nom|')  # Add a y-label to the axes.
-ax_norm.set_title("Normed difference between u and nominal u")  # Add a title to the axes.
-ax_norm.legend()  # Add a legend.
-ax_norm.axhline(y=0, color='k', lw=1)
-
-plt.show()
 
 print("Completed!")
