@@ -76,14 +76,14 @@ huil = 1
 human_robot = number_robots
 
 # HuIL parameters
-v_huil = 20
+v_huil = 2.25
 division = 6
 
 # Parameter to decide if wedge is shown or not
 wedge = False
 
 # Parameter to decide if Extra robot is shown or not
-extra_robot = False
+extra_robot = True
 
 # Safety check, if wedge or extra_robot is active. cm should not be
 if wedge or extra_robot:
@@ -98,16 +98,23 @@ number_neighbours = []
 edges = []
 # Create Laplacian matrix for the graph
 L_G = np.zeros((number_robots,number_robots))
-# Create robot list for the name of columns
+# Create robot/wedge/extra_robot list for the name of columns
 robot_col = ['Time']
-#Setup controller output init output
+wedge_col = ['Time']
+extra_robot_col = ['Time']
+# Setup controller output init output
 controller = [0.]
 nom_controller = [0.]
+cbf_extra_robot = [0.]
+cbf_wedge = [0.]
 for i in range(number_robots):
     number_neighbours.append(len(neighbours[i]))
     L_G[i, i] = number_neighbours[i]
     robot_col.append("Robot_x"+str(i+1))
     robot_col.append("Robot_y"+str(i+1))
+    wedge_col.append("Robot_Up"+str(i+1))
+    wedge_col.append("Robot_Low"+str(i+1))
+    extra_robot_col.append("Robot"+str(i+1))
     for j in neighbours[i]:
         L_G[i, j-1] = -1
         if (i+1,j) not in edges and (j,i+1) not in edges:
@@ -116,10 +123,12 @@ for i in range(number_robots):
     controller.append(0.)
     nom_controller.append(0.)
     nom_controller.append(0.)
+    cbf_extra_robot.append(0.)
+    cbf_wedge.append(0.)
 
 # Create edge list for the name of columns
 edges_col = ['Time']
-#Setup cbf functions init output
+# Setup cbf functions init output
 cbf_cm = [0.]
 cbf_oa = [0.]
 for i in range(len(edges)):
@@ -161,9 +170,9 @@ df_nom_controller = pd.DataFrame(columns=robot_col)
 global df_huil_controller
 df_huil_controller = pd.DataFrame(columns=[robot_col[0], robot_col[2*human_robot-1], robot_col[2*human_robot]]) 
 global df_cbf_wedge
-df_cbf_wedge = pd.DataFrame(columns=robot_col)
+df_cbf_wedge = pd.DataFrame(columns=wedge_col)
 global df_cbf_extra_robot
-df_cbf_extra_robot = pd.DataFrame(columns=robot_col)  
+df_cbf_extra_robot = pd.DataFrame(columns=extra_robot_col)  
 
 ## Simulation and visualization loop
 
@@ -189,7 +198,7 @@ for i in tqdm(range(max_time_size-1)):
     # Compute nominal controller - Centralized and Distributed
     u_nom = formationController(L_G, p[:,i], p_d)
 
-    # Add HuIL controll
+    # Add HuIL control
     if extra_robot:
         u_n = u_nom
     else:
@@ -198,8 +207,20 @@ for i in tqdm(range(max_time_size-1)):
     # Compute CBF constrained controller (w and w/out arena safety, wedge shape or extra robot) - Centralized and Distributed
     if extra_robot:
         u, b_cm, b_oa, b_extra_robot = cbfControllerWArenaExtra(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max, A_extra, b_extra, d_oa, huil_p[:,i], v_huil, v_huil)
+        # Save extra robot cbf in dataframe
+        cbf_extra_robot[0] = secs
+        cbfextra_robot = b_extra_robot/alpha
+        cbf_extra_robot[1:] = cbfextra_robot.tolist()
+        df2_cbf_extra_robot = pd.DataFrame(np.array([cbf_extra_robot]), columns=extra_robot_col)
+        df_cbf_extra_robot = df_cbf_extra_robot.append(df2_cbf_extra_robot, ignore_index=True)
     elif wedge:
         u, b_cm, b_oa, b_wedgie = cbfControllerWArenaWedge(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max, A_wedge, b_wedge)
+        # Save wedge cbf in dataframe
+        cbf_wedge[0] = secs
+        cbfwedge = b_wedgie/alpha
+        cbf_wedge[1:] = cbfwedge.tolist()
+        df2_cbf_wedge = pd.DataFrame(np.array([cbf_wedge]), columns=wedge_col)
+        df_cbf_wedge = df_cbf_wedge.append(df2_cbf_wedge, ignore_index=True)
     else:
         #u, b_cm, b_oa = cbfController(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha)
         u, b_cm, b_oa = cbfControllerWArena(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max)
@@ -309,6 +330,38 @@ ax_norm.set_title("Normed difference between u and nominal u")  # Add a title to
 ax_norm.legend()  # Add a legend.
 ax_norm.axhline(y=0, color='k', lw=1)
 
+if wedge:
+    # Plot the CBF wedge shape
+    cbf_wedge_col = df_cbf_wedge.columns.values
+    fig_cbf_wedge, ax_cbf_wedge = plt.subplots()  # Create a figure and an axes.
+    ax_cbf_wedge.axis('on')
+    for i in range(1, len(cbf_wedge_col)):
+        if i > 0:
+            ax_cbf_wedge.plot(df_cbf_wedge[cbf_wedge_col[0]].iloc[starting_point:-1], df_cbf_wedge[cbf_wedge_col[i]].iloc[starting_point:-1], label=cbf_wedge_col[i])  # Plot some data on the axes.
+
+    ax_cbf_wedge.set_xlabel('time')  # Add an x-label to the axes.
+    ax_cbf_wedge.set_ylabel('h_wedge')  # Add a y-label to the axes.
+    ax_cbf_wedge.set_title("CBF functions for wedge shape")  # Add a title to the axes.
+    ax_cbf_wedge.legend()  # Add a legend.
+    ax_cbf_wedge.axhline(y=0, color='k', lw=1)
+
+if extra_robot:
+    # Plot the CBF extra robot
+    cbf_extra_robot_col = df_cbf_extra_robot.columns.values
+    fig_cbf_extra_robot, ax_cbf_extra_robot = plt.subplots()  # Create a figure and an axes.
+    step = 1
+    ax_cbf_extra_robot.axis('on')
+    for i in range(1, len(cbf_extra_robot_col)):
+        if i > 0:
+            ax_cbf_extra_robot.plot(df_cbf_extra_robot[cbf_extra_robot_col[0]].iloc[starting_point:-1], df_cbf_extra_robot[cbf_extra_robot_col[i]].iloc[starting_point:-1], label="Robot"+str(step))  # Plot some data on the axes.
+            step += 1
+
+    ax_cbf_extra_robot.set_xlabel('time')  # Add an x-label to the axes.
+    ax_cbf_extra_robot.set_ylabel('h_extra_robot')  # Add a y-label to the axes.
+    ax_cbf_extra_robot.set_title("CBF functions for extra_robot")  # Add a title to the axes.
+    ax_cbf_extra_robot.legend()  # Add a legend.
+    ax_cbf_extra_robot.axhline(y=0, color='k', lw=1)
+
 plt.show()
 
 
@@ -397,5 +450,6 @@ anim = animation.FuncAnimation(fig, animate,
 
 plt.show()
 
+#anim.save('animation.mp4', fps=50, extra_args=['-vcodec', 'libx264'])
 
 print("Completed!")
