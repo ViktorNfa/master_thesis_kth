@@ -27,8 +27,8 @@ from distributed_auxiliary import *
 dim = 2
 
 # Window size
-winx = 30
-winy = 30
+winx = 20
+winy = 20
 
 # Arena size
 x_max = winx-5
@@ -38,10 +38,10 @@ y_max = winy-5
 r_robot = 0.5
 
 # Frequency of update of the simulation (in Hz)
-freq = 50
+freq = 100
 
 # Maximum time of the simulation (in seconds)
-max_T = 60
+max_T = 30
 
 # Ideal formation positions
 formation_positions = [[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]
@@ -59,10 +59,10 @@ neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
 #neighbours = [[i+1 for i in range(number_robots) if i != j] for j in range(number_robots)]
 
 # CBF Communication maintenance or obstacle avoidance activation (1 is cm/-1 is oa)
-cbf = -1
+cbf = 1
 
 # Safe distance for communication maintenance and obstacle avoidance
-d = 1.5
+d = 2
 
 # Linear alpha function with parameter
 alpha = 1
@@ -75,11 +75,11 @@ k0 = 1
 
 # Variable to determine if HuIL is active or not 
 # (1 is activated/0 is deactivated) as well as the robot it affects
-huil = 0
+huil = 1
 human_robot = number_robots
 
 # HuIL parameters
-v_huil = 8
+v_huil = 2
 division = 6
 
 
@@ -109,6 +109,7 @@ for i in range(number_robots):
     controller.append(0.)
     nom_controller.append(0.)
     nom_controller.append(0.)
+
 
 # Create edge list for the name of columns
 edges_col = ['Time']
@@ -143,7 +144,10 @@ max_time_size = max_T*freq
 x = np.zeros((number_robots*dim,max_time_size))
 
 # Randomize initial position
-x[:,0] = x_max*np.random.rand(number_robots*dim)-x_max/2
+#x[:,0] = x_max*np.random.rand(number_robots*dim)-x_max/2
+#x[:,0] = np.array([0, 2, 0, 0, 0, -2, 2, 2, 2, -2])
+#x[:,0] = 2*np.random.rand(number_robots*dim)-2/2
+x[:,0] = 0.7*np.ones(number_robots*dim)+0.5*np.random.rand(number_robots*dim)
 
 # Initialize slack variable
 y = np.zeros((number_robots,max_time_size))
@@ -156,7 +160,10 @@ for t in tqdm(range(max_time_size-1)):
     # Compute nominal controller - Distributed
     u_nom = np.zeros((dim*number_robots, 1))
     for i in range(number_robots):
-        u_nom[2*i:2*i+2] = formationController(i, number_neighbours[i], x[:,t], x_d)
+        u_nom[2*i:2*i+2] = np.expand_dims(formationController(i, number_neighbours[i], neighbours[i], x[:,t], x_d), axis=1)
+
+    #u_nom = formationControllerCentralized(L_G, x[:,t], x_d)
+    u_nom = np.squeeze(u_nom, axis=1)
 
     u_n = huilController(u_nom, huil, human_robot, t, max_time_size, v_huil, division)
 
@@ -183,15 +190,18 @@ for t in tqdm(range(max_time_size-1)):
                 a[2*i:2*i+2] += np.zeros((dim, 1))
                 b[i] += 0
 
-        c[i] = (np.dot(L_G[i,:],y[:,t])+np.dot(np.transpose(a[2*i:2*i+1]),u_n[2*i:2*i+1])+b[i])/np.dot(np.transpose(a[2*i:2*i+1]),a[2*i:2*i+1])
-        u[2*i:2*i+1] = u_n[2*i:2*i+1] - np.maximum(0,c[i])*a[2*i:2*i+1]
+        c[i] = (np.dot(L_G[i,:],y[:,t])+np.dot(np.transpose(a[2*i:2*i+2]),u_n[2*i:2*i+2])+b[i])/np.dot(np.transpose(a[2*i:2*i+2]),a[2*i:2*i+2])
+        u[2*i:2*i+2] = np.expand_dims(u_n[2*i:2*i+2], axis=1) - np.maximum(0,c[i])*a[2*i:2*i+2]
+    
+    #u = u_nom
+    u = np.squeeze(u, axis=1)
 
     # Update slack variable
     y[:,t+1] = y[:,t] - np.transpose(k0*np.sign(np.dot(L_G,c)))*(1/freq)
 
     # Update the system using dynamics
     xdot = systemDynamics(x[:,t], u)
-    x[:,t+1] = np.transpose(xdot)*(1/freq) + x[:,t]
+    x[:,t+1] = xdot*(1/freq) + x[:,t]
 
 
     # Save data in dataframe
@@ -294,6 +304,16 @@ fig = plt.figure()
 ax = plt.axes(xlim=(-winx, winx), ylim=(-winy, winy))
 
 time_txt = ax.text(0.475, 0.975,'',horizontalalignment='left',verticalalignment='top', transform=ax.transAxes)
+
+# Add the limits of the arena
+arena_limit1 = plt.Line2D((-x_max, x_max), (y_max, y_max), lw=2.5, color='r')
+arena_limit2 = plt.Line2D((-x_max, x_max), (-y_max, -y_max), lw=2.5, color='r')
+arena_limit3 = plt.Line2D((x_max, x_max), (-y_max, y_max), lw=2.5, color='r')
+arena_limit4 = plt.Line2D((-x_max, -x_max), (-y_max, y_max), lw=2.5, color='r')
+plt.gca().add_line(arena_limit1)
+plt.gca().add_line(arena_limit2)
+plt.gca().add_line(arena_limit3)
+plt.gca().add_line(arena_limit4)
 
 shapes = []
 for i in range(number_robots):

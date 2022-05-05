@@ -9,10 +9,20 @@ from scipy.optimize import minimize, LinearConstraint
 
 ## Auxiliary functions
 
-def formationController(i, number_neighbours, p, p_d):
-    u = np.zeros((2, 1))
+def formationControllerCentralized(L_G, p, p_d):
+    # Create extended laplacian
+    I = np.identity(2)
+    L_ext = np.kron(L_G,I)
+
+    # Compute formation controller
+    u = -np.dot(L_ext,p-p_d)
+    return u
+
+def formationController(i, number_neighbours, neighbours, p, p_d):
+    u = np.zeros(2)
     for j in range(number_neighbours):
-        u += p[2*j:2*j+1] - p[2*i:2*i+1] + p_d[2*i:2*i+1] - p_d[2*j:2*j+1]
+        aux_j = neighbours[j]
+        u += p[2*aux_j-2:2*aux_j] - p[2*i:2*i+2] + p_d[2*i:2*i+2] - p_d[2*aux_j-2:2*aux_j]
     
     return u
 
@@ -56,7 +66,7 @@ def cbf_gradh(p_i, p_j, dir):
 
 def systemDynamics(p, u):
     # System dynamics parameters
-    f = np.zeros((len(p),1))
+    f = np.zeros(len(p))
     g = np.identity(len(u))
 
     # Update state vector derivative

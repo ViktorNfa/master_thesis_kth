@@ -27,8 +27,8 @@ from auxiliary import *
 dim = 2
 
 # Window size
-winx = 30
-winy = 30
+winx = 20
+winy = 20
 
 # Arena size
 x_max = winx-5
@@ -38,33 +38,33 @@ y_max = winy-5
 r_robot = 0.5
 
 # Frequency of update of the simulation (in Hz)
-freq = 50
+freq = 100
 
 # Maximum time of the simulation (in seconds)
-max_T = 60
+max_T = 30
 
 # Ideal formation positions
-#formation_positions = [[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]
-formation_positions = [[0, 10], [0, 8], [0, 6], [0, 4], [0, 2], [0, 0], [0, -2], [0, -4], [0, -6], [0, -8], [0, -10], 
-                        [10, 10], [8, 8], [6, 6], [4, 4], [2, 2], [2, -2], [4, -4], [6, -6], [8, -8], [10, -10]]
+formation_positions = [[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]
+#formation_positions = [[0, 10], [0, 8], [0, 6], [0, 4], [0, 2], [0, 0], [0, -2], [0, -4], [0, -6], [0, -8], [0, -10], 
+#                        [10, 10], [8, 8], [6, 6], [4, 4], [2, 2], [2, -2], [4, -4], [6, -6], [8, -8], [10, -10]]
 
 # Get the number of robots
 number_robots = len(formation_positions)
 
 # List of neighbours for each robot
-#neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
+neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
 #neighbours = [[2, 4], [1, 3, 4, 5], [2, 5], [1, 2], [2, 3]]
 #neighbours = [[2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7, 16, 17], [6, 8], [7, 9], [8, 10], [9, 11], [10], 
 #               [13], [12, 14], [13, 15], [14, 16], [6, 15], [6, 18], [17, 19], [18, 20], [19, 21], [20]]
-neighbours = [[i+1 for i in range(number_robots) if i != j] for j in range(number_robots)]
+#neighbours = [[i+1 for i in range(number_robots) if i != j] for j in range(number_robots)]
 
 # CBF Communication maintenance or obstacle avoidance activation 
 # (1 is activated/0 is deactivated)
-cm = 0
-oa = 1
+cm = 1
+oa = 0
 
 # Safe distance for communication maintenance and obstacle avoidance
-d_cm = 3
+d_cm = 2
 d_oa = 1.1
 
 # Linear alpha function with parameter
@@ -76,14 +76,14 @@ huil = 1
 human_robot = number_robots
 
 # HuIL parameters
-v_huil = 2.25
+v_huil = 2
 division = 6
 
 # Parameter to decide if wedge is shown or not
 wedge = False
 
 # Parameter to decide if Extra robot is shown or not
-extra_robot = True
+extra_robot = False
 
 # Safety check, if wedge or extra_robot is active. cm should not be
 if wedge or extra_robot:
@@ -222,8 +222,8 @@ for i in tqdm(range(max_time_size-1)):
         df2_cbf_wedge = pd.DataFrame(np.array([cbf_wedge]), columns=wedge_col)
         df_cbf_wedge = df_cbf_wedge.append(df2_cbf_wedge, ignore_index=True)
     else:
-        #u, b_cm, b_oa = cbfController(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha)
-        u, b_cm, b_oa = cbfControllerWArena(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max)
+        u, b_cm, b_oa = cbfController(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha)
+        #u, b_cm, b_oa = cbfControllerWArena(p[:,i], u_n, cm, oa, d_cm, d_oa, number_robots, edges, dim, alpha, A_arena, b_arena, x_max, -x_max, y_max, -y_max)
 
     # Update the system using dynamics
     pdot = systemDynamics(p[:,i], u)
