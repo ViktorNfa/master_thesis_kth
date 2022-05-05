@@ -28,9 +28,20 @@ x_vec = zeros(2*N,total_iter);
 x_vec(:,1) = 0.7+0.5*rand(2*N,1);
 %x_vec(:,1) = 0.1*xd+0.1*rand(2*N,1);
 
+% CBF parameters
 alpha = 1;
 p = 1;
 safe_d = 2;
+
+% HuIL parameters
+% Variable to determine if HuIL is active or not 
+% (1 is activated/0 is deactivated) as well as the robot it affects
+huil = 1;
+human_robot = 5;
+
+% HuIL parameters
+v_huil = 2;
+division = 6;
 
 u_vec = zeros(2*N,total_iter);
 
@@ -66,6 +77,7 @@ for iter = 1:length(t_vec)-1
         udi = nominal_controller(x_vec(:,iter),xd,i,N_set);
         ud(2*i-1:2*i,1) = udi;
     end
+    ud = huilController(ud, huil, human_robot, iter, total_iter, v_huil, division);
     
     % implementation 1
     a = zeros(2*N,1);
