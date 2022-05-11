@@ -43,6 +43,10 @@ function [CBF_cond_vec, CBF_value_vec, CBF_value_each] = CBF_vec(control_scheme,
                 bi = bi - alpha/2*(1/4-exp(-p*cbf_func(x_i, x_j, safe_d)));
             end
             ci = (L(i,:)*y_vec(:,iter)+ai'*ud(2*i-1:2*i,1)+bi)/(ai'*ai);
+            % To fix ai = 0 error
+            if isnan(ci) || isinf(ci)
+                ci = 0;
+            end
             a(2*i-1:2*i,1) = ai;
             b(i,1) = bi;
             c(i,1) = ci;

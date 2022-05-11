@@ -94,6 +94,10 @@ for iter = 1:length(t_vec)-1
             bi = bi - alpha/2*(1/4-exp(-p*cbf_func(x_i, x_j, safe_d)));
         end
         ci = (L(i,:)*y_vec(:,iter)+ai'*ud(2*i-1:2*i,1)+bi)/(ai'*ai);
+        % To fix ai = 0 error
+        if isnan(ci) || isinf(ci)
+            ci = 0;
+        end
         a(2*i-1:2*i,1) = ai;
         b(i,1) = bi;
         c(i,1) = ci;
