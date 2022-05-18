@@ -24,8 +24,8 @@ total_iter = length(t_vec);
 x_vec = zeros(2*N,total_iter);
 
 %x_vec(:,1) = rand(2*N,1)+0.5;
-%x_vec(:,1) = 0.7*ones(2*N,1);
-x_vec(:,1) = 0.7+0.5*rand(2*N,1);
+x_vec(:,1) = 0.7*ones(2*N,1);
+%x_vec(:,1) = 0.7+0.5*rand(2*N,1);
 %x_vec(:,1) = 0.1*xd+0.1*rand(2*N,1);
 
 % CBF parameters
@@ -94,18 +94,23 @@ for iter = 1:length(t_vec)-1
             bi = bi - alpha/2*(1/4-exp(-p*cbf_func(x_i, x_j, safe_d)));
         end
         ci = (L(i,:)*y_vec(:,iter)+ai'*ud(2*i-1:2*i,1)+bi)/(ai'*ai);
-        % To fix ai = 0 error
-        if isnan(ci) || isinf(ci)
-            ci = 0;
-        end
         a(2*i-1:2*i,1) = ai;
         b(i,1) = bi;
         c(i,1) = ci;
         u_impl1_i = ud(2*i-1:2*i,1) - max(0,ci)*ai;
         u_impl1(2*i-1:2*i,1)=  u_impl1_i;
     end
-    % update y
-    y_vec(:,iter+1) = y_vec(:,iter)-k0*sign(L*c)*dt;
+    % Centralized update y
+    %y_vec(:,iter+1) = y_vec(:,iter)-k0*sign(L*c)*dt;
+    % Distributed update y
+    for i = 1:N
+        % To fix ai = 0 error
+        if isnan(ci) || isinf(ci)
+            y_vec(i,iter+1)=0;
+        else
+            y_vec(i,iter+1) = y_vec(i,iter)-k0*sign(L(i,:)*c)*dt;
+        end
+    end
     % record a, b, c
     a_vec(:,iter) = a; b_vec(:,iter) = b; c_vec(:,iter) = c;
     
