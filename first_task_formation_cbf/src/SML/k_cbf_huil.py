@@ -53,10 +53,10 @@ class KCBFHuIL():
         for i in range(number_robots):
             A_arena[4*i:4*i+4, 2*i:2*i+2] = As
         b_arena = np.zeros((number_robots*4))
-        xmax = 2
-        xmin = -1.4
-        ymax = 1.8
-        ymin = -3
+        xmax = 1.9
+        xmin = -1.9
+        ymax = 2
+        ymin = -3.1
 
         #Get neighbour numbers from parameters
         neighbours = rospy.get_param('/neighbours')
@@ -103,7 +103,7 @@ class KCBFHuIL():
         gains = (1, 1, 1)
 
         #CBF constraint parameters
-        alfa = 2
+        alfa = 1
 
         #Init robot pose
         self.robot_pose = []

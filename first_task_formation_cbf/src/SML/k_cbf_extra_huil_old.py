@@ -53,10 +53,10 @@ class KCBFExtraHuIL():
         for i in range(number_robots):
             A_arena[4*i:4*i+4, 2*i:2*i+2] = As
         b_arena = np.zeros((number_robots*4))
-        xmax = 1.9
-        xmin = -1.9
-        ymax = 2
-        ymin = -3.1
+        xmax = 5
+        xmin = -5
+        ymax = 5
+        ymin = -5
 
         #Get neighbour numbers from parameters
         neighbours = rospy.get_param('/neighbours')
@@ -110,10 +110,6 @@ class KCBFExtraHuIL():
         alfa = 1
         alfa_extra = 1
 
-        #Max speed of HIL
-        vxe = 0.8
-        vye = 0.8
-
         #Init robot pose
         self.robot_pose = []
         #Init last received pose time
@@ -151,7 +147,7 @@ class KCBFExtraHuIL():
         rospy.Subscriber("/qualisys/nexus"+str(human_robot-1)+"/pose", geometry_msgs.msg.PoseStamped, self.huil_robot_pose_callback)
         
         #Setup HuIL controller subscriber
-        #rospy.Subscriber("/HuIL/key_vel", geometry_msgs.msg.Twist, self.huil_callback)
+        rospy.Subscriber("/HuIL/key_vel", geometry_msgs.msg.Twist, self.huil_callback)
 
         #Setup velocity command publisher
         vel_pub = []
@@ -159,7 +155,7 @@ class KCBFExtraHuIL():
             vel_pub.append(rospy.Publisher("/nexus"+str(robots_number[i]-1)+"/cmd_vel", geometry_msgs.msg.Twist, queue_size=100))
 
         #Setup extra-HuIL robot velocity command publisher
-        #huil_vel_pub = rospy.Publisher("/nexus"+str(human_robot-1)+"/cmd_vel", geometry_msgs.msg.Twist, queue_size=100)
+        huil_vel_pub = rospy.Publisher("/nexus"+str(human_robot-1)+"/cmd_vel", geometry_msgs.msg.Twist, queue_size=100)
 
         #Setup cbf functions publisher
         cbf_cm_pub = []
@@ -207,7 +203,7 @@ class KCBFExtraHuIL():
             vel_cmd_msg.append(geometry_msgs.msg.Twist())
 
         #Create a ROS Twist message for extra-HuIL velocity command
-        #huil_vel_cmd_msg = geometry_msgs.msg.Twist()
+        huil_vel_cmd_msg = geometry_msgs.msg.Twist()
 
         #-----------------------------------------------------------------
         # Loop at set frequency and publish position command if necessary
@@ -288,7 +284,7 @@ class KCBFExtraHuIL():
                     nom_controller_pub[i].publish(nom_controller_msg)
 
                     A_extra[i, 2*i:2*i+2] = 2*np.array([p[i, 0]-huil_p[0], p[i, 1]-huil_p[1]])
-                    b_extra[i] = alfa_extra*(self.cbf_h(p[i], huil_p, safe_distance_extra, -1)-safe_distance_extra**2-2*(p[i, 0]-huil_p[0])*vxe-2*(p[i, 1]-huil_p[1])*vye)
+                    b_extra[i] = alfa_extra*self.cbf_h(p[i], huil_p, safe_distance_extra, -1)
 
                 #Create CBF constraint matrices
                 A_cm = np.zeros((len(edges), number_robots*n))
@@ -357,9 +353,9 @@ class KCBFExtraHuIL():
                     controller_pub[i].publish(controller_msg)
 
                 #For the extra-HuIL robot controlled
-                #huil_vel_cmd_msg.linear.x = huil*self.vel_huil.linear.x * gains[0]
-                #huil_vel_cmd_msg.linear.y = huil*self.vel_huil.angular.z * gains[1]
-                #huil_vel_cmd_msg.angular.z = huil*huil_u_nom_heading * gains[2]
+                huil_vel_cmd_msg.linear.x = huil*self.vel_huil.linear.x * gains[0]
+                huil_vel_cmd_msg.linear.y = huil*self.vel_huil.angular.z * gains[1]
+                huil_vel_cmd_msg.angular.z = huil*huil_u_nom_heading * gains[2]
 
             #Else stop robot
             else:
@@ -369,9 +365,9 @@ class KCBFExtraHuIL():
                     vel_cmd_msg[i].angular.z = 0
 
                 #For the extra-HuIL robot controlled
-                #huil_vel_cmd_msg.linear.x = 0
-                #huil_vel_cmd_msg.linear.y = 0
-                #huil_vel_cmd_msg.angular.z = 0
+                huil_vel_cmd_msg.linear.x = 0
+                huil_vel_cmd_msg.linear.y = 0
+                huil_vel_cmd_msg.angular.z = 0
 
             #------------------------------------------
             # Publish command & controller output norm
@@ -389,11 +385,11 @@ class KCBFExtraHuIL():
 
                 #For the extra-HuIL robot controlled
                 #Get transform from mocap frame to robot frame
-                #huil_transform = huil_tf_buffer.lookup_transform('mocap', "nexus"+str(human_robot-1), rospy.Time())
+                huil_transform = huil_tf_buffer.lookup_transform('mocap', "nexus"+str(human_robot-1), rospy.Time())
                 #
-                #huil_vel_cmd_msg_transformed = transform_twist(huil_vel_cmd_msg, huil_transform)
+                huil_vel_cmd_msg_transformed = transform_twist(huil_vel_cmd_msg, huil_transform)
                 #Publish cmd message
-                #huil_vel_pub.publish(huil_vel_cmd_msg_transformed)
+                huil_vel_pub.publish(huil_vel_cmd_msg_transformed)
             except:
                 continue
 

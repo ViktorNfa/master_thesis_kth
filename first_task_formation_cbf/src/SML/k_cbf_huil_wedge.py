@@ -53,13 +53,13 @@ class KCBFHuILWedge():
         for i in range(number_robots):
             A_arena[4*i:4*i+4, 2*i:2*i+2] = As
         b_arena = np.zeros((number_robots*4))
-        xmax = 2
-        xmin = -1.4
-        ymax = 1.8
-        ymin = -3
+        xmax = 1.8
+        xmin = -1.9
+        ymax = 2
+        ymin = -2.9
 
         #Create wedge CBF
-        Aw = np.array([[-2.25/6, -1], [-2.25/6, 1]])
+        Aw = np.array([[-2.5/4, -1], [-2.5/4, 1]])
         A_wedge = np.zeros((number_robots*2, number_robots*2))
         for i in range(number_robots):
             A_wedge[2*i:2*i+2, 2*i:2*i+2] = Aw
@@ -283,8 +283,8 @@ class KCBFHuILWedge():
 
                 #Calculate CBF for wedge
                 for i in range(number_robots):
-                    b_wedge[2*i] = alfa*(-2.25/6*p[i, 0] + 1.125 - p[i, 1])
-                    b_wedge[2*i+1] = alfa*(p[i, 1] - 2.25/6*p[i, 0] + 1.125)
+                    b_wedge[2*i] = alfa*(-2.5/4*p[i, 0] + 2.5/2 - p[i, 1])
+                    b_wedge[2*i+1] = alfa*(p[i, 1] - 2.5/4*p[i, 0] + 2.5/2)
 
                 #----------------------------
                 # Solve minimization problem

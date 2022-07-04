@@ -30,7 +30,7 @@
     <!-- Spawn the robot -->
     <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
       args="-urdf -model nexus1 -param robot_description -x -1 -y 3 -z 0.5" />
-      <!-- Auto node -->
+    <!-- Auto node -->
     <node name="cbf_formation_controller" pkg="first_task_formation_cbf" type="formation_keeping_DEPRECATED.py" output="screen" >
       <param name="robot_name" value="nexus1"/>
       <rosparam param="neighbours">[2, 4]</rosparam>

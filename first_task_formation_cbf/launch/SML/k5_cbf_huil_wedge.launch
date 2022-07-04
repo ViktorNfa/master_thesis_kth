@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <launch>
   <!-- For SML testing -->
-  <arg name="use_sim_time" default="false" />
+  <arg name="use_sim_time" default="false" /> -->
   <!-- For simulation -->
   <!-- <arg name="use_sim_time" default="true" /> -->
 
@@ -17,13 +17,13 @@
   </include>
 
   <!-- Ideal formation position -->
-  <rosparam param="formation_positions">[[0, 0.75], [0, 0], [0, -0.75], [1, 0.75], [1, -0.75]]</rosparam>
+  <rosparam param="formation_positions">[[0, 0.75], [0, 0], [0, -0.75], [0.75, 0.75], [0.75, -0.75]]</rosparam>
 
   <!-- Robots numbers -->
   <rosparam param="robots_number">[1, 2, 3, 4, 5]</rosparam>
 
   <!-- List of neighbours for each robot-->
-  <rosparam param="neighbours">[[2, 4], [1, 3, 4, 5], [2, 5], [1, 2], [2, 3]]</rosparam>
+  <rosparam param="neighbours">[[2], [1, 3, 4, 5], [2], [2], [2]]</rosparam>
 
   <!-- CBF Communication maintenance or obstacle avoidance activation (1 is activated/0 is deactivated) -->
   <param name="cbf_cm" value="1"/>
@@ -31,7 +31,7 @@
 
   <!-- Safe distance for communication maintenance and obstacle avoidance -->
   <param name="safe_distance_cm" value="1.0"/>
-  <param name="safe_distance_oa" value="0.7"/>
+  <param name="safe_distance_oa" value="0.5"/>
 
   <!-- Variable to determine if HuIL is active or not (1 is activated/0 is deactivated) as well as the robot it affects -->
   <param name="huil" value="1"/>
@@ -84,15 +84,15 @@
 
   <!-- Centralized auto node -->
   <group ns="Auto">
-    <node name="k_cbf_huil" pkg="first_task_formation_cbf" type="k_cbf_huil.py" output="screen" >
+    <node name="k_cbf_huil_wedge" pkg="first_task_formation_cbf" type="k_cbf_huil_wedge.py" output="screen" >
     </node>
   </group>
 
   <!-- Human-In-The-Loop controller node -->
   <group ns="HuIL">
     <node name="key_teleop" pkg="first_task_formation_cbf" type="key_teleop.py" output="screen" launch-prefix="gnome-terminal --command" >
-      <param name="forward_rate" value="1"/>
-      <param name="backward_rate" value="1"/>
+      <param name="forward_rate" value="0.5"/>
+      <param name="backward_rate" value="0.5"/>
       <param name="rotation_rate" value="0.5"/>
       <param name="hz" value="50"/>
     </node>
@@ -111,7 +111,7 @@
   </group>
 
   <!-- Motion capture system SML -->
-  <include file="$(find mocap_qualisys)/launch/qualisys.launch" />
+  <include file="$(find mocap_qualisys)/launch/qualisys.launch" /> -->
   <!-- Motion capture system simulation -->
   <!-- <include file="$(find mocap_simulator)/launch/qualisys_simulator.launch" /> -->
 
