@@ -1,8 +1,3 @@
-#!/usr/bin/env python
-
-# To force int division to floats (for Python 2.7)
-from __future__ import division
-
 import numpy as np
 from scipy.optimize import minimize, LinearConstraint
 
@@ -64,10 +59,14 @@ def cbf_gradh(p_i, p_j, dir):
     # Dir 1 corresponds to CM and -1 to OA
     return dir*(-2*np.array([[p_i[0]-p_j[0]], [p_i[1]-p_j[1]]]))
 
-def systemDynamics(p, u):
+def systemDynamics(p, u, u_max, u_min):
     # System dynamics parameters
     f = np.zeros(len(p))
     g = np.identity(len(u))
+
+    # Bound the control input
+    for i in range(len(u)):
+        u[i] = max(u_min, min(u_max, u[i]))
 
     # Update state vector derivative
     xdot = f+np.dot(g,u)
