@@ -38,7 +38,7 @@ y_max = winy-5
 r_robot = 0.5
 
 # Frequency of update of the simulation (in Hz)
-freq = 100
+freq = 50
 
 # Maximum time of the simulation (in seconds)
 max_T = 30
@@ -52,8 +52,8 @@ formation_positions = [[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]
 number_robots = len(formation_positions)
 
 # List of neighbours for each robot
-neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
-#neighbours = [[2, 4], [1, 3, 4, 5], [2, 5], [1, 2], [2, 3]]
+#neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
+neighbours = [[2, 4], [1, 3, 4, 5], [2, 5], [1, 2], [2, 3]]
 #neighbours = [[2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7, 16, 17], [6, 8], [7, 9], [8, 10], [9, 11], [10], 
 #               [13], [12, 14], [13, 15], [14, 16], [6, 15], [6, 18], [17, 19], [18, 20], [19, 21], [20]]
 #neighbours = [[i+1 for i in range(number_robots) if i != j] for j in range(number_robots)]
@@ -61,7 +61,7 @@ neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
 # CBF Communication maintenance or obstacle avoidance activation 
 # (1 is activated/0 is deactivated)
 cm = 1
-oa = 0
+oa = 1
 
 # Safe distance for communication maintenance and obstacle avoidance
 d_cm = 2

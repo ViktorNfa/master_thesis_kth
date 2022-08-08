@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.optimize import minimize, LinearConstraint
+import math
 
 
 ## Auxiliary functions
@@ -71,3 +72,13 @@ def systemDynamics(p, u, u_max, u_min):
     # Update state vector derivative
     xdot = f+np.dot(g,u)
     return xdot
+
+def sigmoid(x, a):
+    if x >= a:
+        sol = 1
+    elif x <= a:
+        sol = -1
+    else:
+        sol = 1/a*x
+
+    return sol

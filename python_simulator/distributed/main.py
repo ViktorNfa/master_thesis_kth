@@ -44,23 +44,26 @@ max_T = 30
 # Ideal formation positions
 formation_positions = [[0, 2], [0, 0], [0, -2], [2, 2], [2, -2]]
 #formation_positions = [[0, 10], [0, 8], [0, 6], [0, 4], [0, 2], [0, 0], [0, -2], [0, -4], [0, -6], [0, -8], [0, -10], 
-#                        [10, 10], [8, 8], [6, 6], [4, 4], [2, 2], [2, -2], [4, -4], [6, -6], [8, -8], [10, -10]]
+#                       [10, 10], [8, 8], [6, 6], [4, 4], [2, 2], [2, -2], [4, -4], [6, -6], [8, -8], [10, -10]]
 
 # Get the number of robots
 number_robots = len(formation_positions)
 
 # List of neighbours for each robot
-neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
+#neighbours = [[2], [1, 3, 4, 5], [2], [2], [2]]
 #neighbours = [[2, 4], [1, 3, 4, 5], [2, 5], [1, 2], [2, 3]]
 #neighbours = [[2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7, 16, 17], [6, 8], [7, 9], [8, 10], [9, 11], [10], 
 #               [13], [12, 14], [13, 15], [14, 16], [6, 15], [6, 18], [17, 19], [18, 20], [19, 21], [20]]
-#neighbours = [[i+1 for i in range(number_robots) if i != j] for j in range(number_robots)]
+neighbours = [[i+1 for i in range(number_robots) if i != j] for j in range(number_robots)]
 
-# CBF Communication maintenance or obstacle avoidance activation (1 is cm/-1 is oa)
-cbf = -1
+# CBF Communication maintenance or obstacle avoidance activation 
+# (1 is activated/0 is deactivated)
+cm = 0
+oa = 1
 
 # Safe distance for communication maintenance and obstacle avoidance
-d = 2
+d_cm = 3
+d_oa = 1.1
 
 # Linear alpha function with parameter
 alpha = 1
@@ -83,6 +86,9 @@ human_robot = number_robots
 v_huil = 2
 division = 6
 
+# Parameter to decide if Extra robot is shown or not
+extra_robot = False
+
 
 ## Pre-calculations needed for controller and simulation
 
@@ -95,17 +101,14 @@ number_neighbours = []
 edges = []
 # Create Laplacian matrix for the graph
 L_G = np.zeros((number_robots,number_robots))
-# Create robot/wedge/extra_robot list for the name of columns
-robot_col = ['Time']
 # Setup controller output init output
 controller = np.zeros((number_robots*dim,max_time_size))
 nom_controller = np.zeros((number_robots*dim,max_time_size))
 huil_controller = np.zeros((dim,max_time_size))
+cbf_extra_robot = np.zeros((number_robots*dim,max_time_size))
 for i in range(number_robots):
     number_neighbours.append(len(neighbours[i]))
     L_G[i, i] = number_neighbours[i]
-    robot_col.append("Robot_x"+str(i+1))
-    robot_col.append("Robot_y"+str(i+1))
     for j in neighbours[i]:
         L_G[i, j-1] = -1
         if (i+1,j) not in edges and (j,i+1) not in edges:
@@ -113,9 +116,10 @@ for i in range(number_robots):
 
 
 # Create edge list for the name of columns
-edges_col = ['Time']
+edges_col = []
 # Setup cbf functions init output
-cbf_cmoa = np.zeros((len(edges),max_time_size))
+cbf_cm = np.zeros((len(edges),max_time_size))
+cbf_oa = np.zeros((len(edges),max_time_size))
 for i in range(len(edges)):
     edges_col.append("Edge"+str(edges[i]))
 
@@ -131,18 +135,24 @@ update_par = freq/freq_sol
 # Initialize position matrix
 x = np.zeros((number_robots*dim,max_time_size))
 
+# Initialize position for extra robot
+huil_x = np.zeros((dim,max_time_size))
+
 # Randomize initial position
 #x[:,0] = 1*(2*x_max*np.random.rand(number_robots*dim)-x_max)
 #x[:,0] = [-(x_max-1), (y_max-1), 0, 0, -(x_max-1), -(y_max-1), (x_max-1), (y_max-1), (x_max-1), -(y_max-1)]
 #x[:,0] = [-(x_max-5), (y_max-5), 0, 0, -(x_max-5), -(y_max-5), (x_max-5), (y_max-5), (x_max-5), -(y_max-5)]
-#x[:,0] = x_max*np.random.rand(number_robots*dim)-x_max/2
+x[:,0] = x_max*np.random.rand(number_robots*dim)-x_max/2
 #x[:,0] = np.array([0, 2, 0, 0, 0, -2, 2, 2, 2, -2])
 #x[:,0] = 2*np.random.rand(number_robots*dim)-2/2
-x[:,0] = 0.7*np.ones(number_robots*dim)+0.5*np.random.rand(number_robots*dim)
+#x[:,0] = 0.7*np.ones(number_robots*dim)+0.5*np.random.rand(number_robots*dim)
 #x[:,0] = 0.7*np.ones(number_robots*dim)
 
+# Random initial position for extra robot
+huil_x[:,0] = np.array([-(x_max-5), (y_max-1)])
+
 # Initialize slack variable
-y_cm = np.zeros((number_robots,max_time_size))
+y = np.zeros((number_robots,max_time_size))
 
 # Define objective function for minimization solver
 def objective_function(u_sol, u_n_sol):
@@ -165,12 +175,13 @@ for t in tqdm(range(max_time_size-1)):
         u_n = huilController(u_nom, huil, human_robot, t, max_time_size, v_huil, division)
 
         # Compute CBF constrained controller - Distributed
-        u = np.zeros(dim*number_robots)
-        c_cm = np.zeros((number_robots, 1))
-        a_cm = np.zeros((dim*number_robots, 1))
-        b_cm = np.zeros((number_robots, 1))
+        u = np.zeros((dim*number_robots,1))
+        c = np.zeros((number_robots, 1))
+        a = np.zeros((dim*number_robots, 1))
+        b = np.zeros((number_robots, 1))
         for i in range(number_robots):
 
+            # Collective constraints
             for e in range(len(edges)):
                 aux_i = edges[e][0]-1
                 aux_j = edges[e][1]-1
@@ -178,35 +189,37 @@ for t in tqdm(range(max_time_size-1)):
                 x_j = np.array([x[2*aux_j,t],x[2*aux_j+1,t]])
 
                 if i == aux_i:
-                    a_cm[2*i:2*i+2] += -p*np.exp(-p*cbf_h(x_i, x_j, d, cbf))*cbf_gradh(x_i, x_j, cbf)
-                    b_cm[i] += -alpha/2*(1/len(edges)-np.exp(-p*cbf_h(x_i, x_j, d, cbf)))
+                    # CM
+                    a[2*i:2*i+2] += -p*np.exp(-p*cbf_h(x_i, x_j, d_cm, 1))*cbf_gradh(x_i, x_j, 1)
+                    b[i] += -alpha/2*(1/len(edges)-np.exp(-p*cbf_h(x_i, x_j, d_cm, 1)))
+                    # OA
+                    a[2*i:2*i+2] += -p*np.exp(-p*cbf_h(x_i, x_j, d_oa, -1))*cbf_gradh(x_i, x_j, -1)
+                    b[i] += -alpha/2*(1/len(edges)-np.exp(-p*cbf_h(x_i, x_j, d_oa, -1)))
                 elif i == aux_j:
-                    a_cm[2*i:2*i+2] += -p*np.exp(-p*cbf_h(x_i, x_j, d, cbf))*cbf_gradh(x_j, x_i, cbf)
-                    b_cm[i] += -alpha/2*(1/len(edges)-np.exp(-p*cbf_h(x_i, x_j, d, cbf)))
+                    # CM
+                    a[2*i:2*i+2] += -p*np.exp(-p*cbf_h(x_i, x_j, d_cm, 1))*cbf_gradh(x_j, x_i, 1)
+                    b[i] += -alpha/2*(1/len(edges)-np.exp(-p*cbf_h(x_i, x_j, d_cm, 1)))
+                    # OA
+                    a[2*i:2*i+2] += -p*np.exp(-p*cbf_h(x_i, x_j, d_oa, -1))*cbf_gradh(x_j, x_i, -1)
+                    b[i] += -alpha/2*(1/len(edges)-np.exp(-p*cbf_h(x_i, x_j, d_oa, -1)))
                 else:
-                    a_cm[2*i:2*i+2] += np.zeros((dim, 1))
-                    b_cm[i] += 0
+                    # CM
+                    a[2*i:2*i+2] += np.zeros((dim, 1))
+                    b[i] += 0
+                    # OA
+                    a[2*i:2*i+2] += np.zeros((dim, 1))
+                    b[i] += 0
+
+            # Individual constraints
             
-            if a_cm[2*i] != 0 and a_cm[2*i+1] != 0:
-                c_cm[i] = (np.dot(L_G[i,:],y_cm[:,t])+np.dot(np.transpose(a_cm[2*i:2*i+2]),u_n[2*i:2*i+2])+b_cm[i])/np.dot(np.transpose(a_cm[2*i:2*i+2]),a_cm[2*i:2*i+2])
+            
+            u[2*i:2*i+2] = np.expand_dims(u_n[2*i:2*i+2], axis=1)
+            if a[2*i] != 0 and a[2*i+1] != 0:
+                c[i] = (np.dot(L_G[i,:],y[:,t]) + 
+                    np.dot(np.transpose(a[2*i:2*i+2]),u_n[2*i:2*i+2])+b[i])/np.dot(np.transpose(a[2*i:2*i+2]),a[2*i:2*i+2])
+                u[2*i:2*i+2] -=  np.maximum(0,c[i])*a[2*i:2*i+2]
 
-            #else:
-            #    # Define linear constraints
-            #    constraint_cm = LinearConstraint(np.transpose(a_cm[2*i:2*i+2]), lb=-np.inf, ub=(-np.dot(L_G[i,:],y_cm[:,t]) - b_cm[i])*a_cm[2*i:2*i+2])
-
-            # Define linear constraints
-            constraint_cm = LinearConstraint(np.transpose(a_cm[2*i:2*i+2]), lb=-np.inf, ub=-np.dot(L_G[i,:],y_cm[:,t]) - b_cm[i])
-
-            # Construct the problem
-            u_sol = minimize(
-                objective_function,
-                x0=u_n[2*i:2*i+2],
-                args=(u_n[2*i:2*i+2],),
-                constraints=[constraint_cm],
-            )
-
-            # Solve the problem
-            u[2*i:2*i+2] = u_sol.x
+        u = np.squeeze(u, axis=1)
 
     # Update the system using dynamics
     xdot = systemDynamics(x[:,t], u, u_max, -u_max)
@@ -214,12 +227,11 @@ for t in tqdm(range(max_time_size-1)):
 
     # Update slack variable
     for i in range(number_robots):
-        if a_cm[2*i] == 0 and a_cm[2*i+1] == 0:
-            y_cm[i,t+1] = 0
+        if a[2*i] == 0 and a[2*i+1] == 0:
+            y[i,t+1] = 0
         else:
-            #y_cm[i,t+1] = y[i,t]
-            y_cm[i,t+1] = y_cm[i,t] - np.transpose(k0*np.sign(np.dot(L_G[i,:],c_cm)))*(1/freq)
-
+            #y[i,t+1] = y[i,t]
+            y[i,t+1] = y[i,t] - np.transpose(k0*sigmoid(np.dot(L_G[i,:],c), 10))*(1/freq)
 
     # Save CBF functions
     for e in range(len(edges)):
@@ -227,7 +239,8 @@ for t in tqdm(range(max_time_size-1)):
         aux_j = edges[e][1]-1
         x_i = np.array([x[2*aux_i,t],x[2*aux_i+1,t]])
         x_j = np.array([x[2*aux_j,t],x[2*aux_j+1,t]])
-        cbf_cmoa[e,t+1] = cbf_h(x_i, x_j, d, cbf)
+        cbf_cm[e,t+1] = cbf_h(x_i, x_j, d_cm, 1)
+        cbf_oa[e,t+1] = cbf_h(x_i, x_j, d_oa, -1)
     
     # Save Final controller
     controller[:,t+1] = u
@@ -246,34 +259,32 @@ print("Showing functions evolution...")
 # Plot y-variables
 fig_y, ax_y = plt.subplots()  # Create a figure and an axes.
 for i in range(number_robots):
-    ax_y.plot(1/freq*np.arange(max_time_size), y_cm[i,:], label="Robot"+str(i+1))  # Plot some data on the axes.
-
+    ax_y.plot(1/freq*np.arange(max_time_size), y[i,:], label="Robot"+str(i+1))  # Plot some data on the axes.
 ax_y.set_xlabel('time')  # Add an x-label to the axes.
-ax_y.set_ylabel('y_cm')  # Add a y-label to the axes.
-ax_y.set_title("y-variables for comunication maintenance")  # Add a title to the axes.
+ax_y.set_ylabel('y')  # Add a y-label to the axes.
+ax_y.set_title("y-variables")  # Add a title to the axes.
 ax_y.legend()  # Add a legend.
 ax_y.axhline(y=0, color='k', lw=1)
 
-# Plot CBF conditions
-fig_cbf, ax_cbf = plt.subplots()  # Create a figure and an axes.
+# Plot the CBF comunication maintenance
+fig_cbf_cm, ax_cbf_cm = plt.subplots()  # Create a figure and an axes.
 for i in range(len(edges)):
-    ax_cbf.plot(1/freq*np.arange(max_time_size), cbf_cmoa[i,:], label=edges_col[i])  # Plot some data on the axes.
+    ax_cbf_cm.plot(1/freq*np.arange(max_time_size), cbf_cm[i,:], label=edges_col[i])  # Plot some data on the axes.
+ax_cbf_cm.set_xlabel('time')  # Add an x-label to the axes.
+ax_cbf_cm.set_ylabel('h_cm')  # Add a y-label to the axes.
+ax_cbf_cm.set_title("CBF functions for comunication maintenance")  # Add a title to the axes.
+ax_cbf_cm.legend()  # Add a legend.
+ax_cbf_cm.axhline(y=0, color='k', lw=1)
 
-if cbf == 1:
-    # Plot the CBF comunication maintenance
-    ax_cbf.set_xlabel('time')  # Add an x-label to the axes.
-    ax_cbf.set_ylabel('h_cm')  # Add a y-label to the axes.
-    ax_cbf.set_title("CBF functions for comunication maintenance")  # Add a title to the axes.
-    ax_cbf.legend()  # Add a legend.
-    ax_cbf.axhline(y=0, color='k', lw=1)
-
-if cbf == -1:
-    # Plot the CBF obstacle avoidance
-    ax_cbf.set_xlabel('time')  # Add an x-label to the axes.
-    ax_cbf.set_ylabel('h_oa')  # Add a y-label to the axes.
-    ax_cbf.set_title("CBF functions for obstacle avoidance")  # Add a title to the axes.
-    ax_cbf.legend()  # Add a legend.
-    ax_cbf.axhline(y=0, color='k', lw=1)
+# Plot the CBF obstacle avoidance
+fig_cbf_oa, ax_cbf_oa = plt.subplots()  # Create a figure and an axes.
+for i in range(len(edges)):
+    ax_cbf_oa.plot(1/freq*np.arange(max_time_size), cbf_oa[i,:], label=edges_col[i])  # Plot some data on the axes.
+ax_cbf_oa.set_xlabel('time')  # Add an x-label to the axes.
+ax_cbf_oa.set_ylabel('h_oa')  # Add a y-label to the axes.
+ax_cbf_oa.set_title("CBF functions for obstacle avoidance")  # Add a title to the axes.
+ax_cbf_oa.legend()  # Add a legend.
+ax_cbf_oa.axhline(y=0, color='k', lw=1)
 
 # Plot the normed difference between nominal and final controller
 fig_norm, ax_norm = plt.subplots()  # Create a figure and an axes.
