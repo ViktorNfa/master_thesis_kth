@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Nexus 3  -->
+  <group ns="nexus3">
+    <!-- Load robot description -->
+    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
+  </group>
+
+  <!-- Centralized auto node -->
+  <group ns="Auto">
+    <node name="k1_cbf_huil" pkg="first_task_formation_cbf" type="k1_cbf_huil.py" output="screen" >
+    </node>
+  </group>
+
+  <!-- Human-In-The-Loop controller node -->
+  <group ns="HuIL">
+    <node name="key_teleop" pkg="first_task_formation_cbf" type="key_teleop.py" output="screen" launch-prefix="gnome-terminal --command" >
+      <param name="forward_rate" value="1"/>
+      <param name="backward_rate" value="1"/>
+      <param name="rotation_rate" value="1"/>
+      <param name="hz" value="100"/>
+    </node>
+  </group>
+
+  <!-- Motion capture system SML -->
+  <include file="$(find mocap_qualisys)/launch/qualisys.launch" />
+  <!-- Motion capture system simulation -->
+  <!-- <include file="$(find mocap_simulator)/launch/qualisys_simulator.launch" /> -->
+
+</launch>

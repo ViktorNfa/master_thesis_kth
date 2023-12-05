@@ -1,85 +1,50 @@
 <?xml version="1.0"?>
 <launch>
-  <!-- For SML testing -->
-  <arg name="use_sim_time" default="false" />
-  <!-- For simulation -->
-  <!-- <arg name="use_sim_time" default="true" /> -->
-
-  <arg name="gui" default="true" />
-  <arg name="headless" default="false" />
-
-  <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="debug" value="0" />
-    <arg name="gui" value="$(arg gui)" />
-    <arg name="use_sim_time" value="$(arg use_sim_time)" />
-    <arg name="headless" value="$(arg headless)" />
-    <arg name="paused" value="false"/>
-  </include>
-
   <!-- Ideal formation position -->
-  <rosparam param="formation_positions">[[0, 0.75], [0, 0], [0, -0.75], [1, 0.75], [1, -0.75]]</rosparam>
+  <rosparam param="formation_positions">[[0, 0.3], [0, -0.3], [0.6, 0.3], [0.6, -0.3]]</rosparam>
 
   <!-- Robots numbers -->
-  <rosparam param="robots_number">[1, 2, 3, 4, 5]</rosparam>
+  <rosparam param="robots_number">[1, 2, 3, 4]</rosparam>
 
   <!-- List of neighbours for each robot-->
-  <rosparam param="neighbours">[[2, 4], [1, 3, 4, 5], [2, 5], [1, 2], [2, 3]]</rosparam>
+  <rosparam param="neighbours">[[2, 3], [1, 4], [1, 4], [2, 3]]</rosparam>
 
   <!-- CBF Communication maintenance or obstacle avoidance activation (1 is activated/0 is deactivated) -->
   <param name="cbf_cm" value="1"/>
   <param name="cbf_oa" value="1"/>
+  <param name="extra" value="0"/>
 
   <!-- Safe distance for communication maintenance and obstacle avoidance -->
   <param name="safe_distance_cm" value="1.0"/>
-  <param name="safe_distance_oa" value="0.7"/>
+  <param name="safe_distance_oa" value="0.5"/>
+  <param name="safe_distance_obstacle" value="0.5"/>
 
   <!-- Variable to determine if HuIL is active or not (1 is activated/0 is deactivated) as well as the robot it affects -->
   <param name="huil" value="1"/>
-  <param name="human_robot" value="5"/>
+  <param name="human_robot" value="4"/>
 
   <!-- Nexus 0  -->
   <group ns="nexus0">
     <!-- Load robot description -->
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
-    <!-- Spawn the robot -->
-    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus0 -param robot_description -x -1 -y 1.7 -z 0.5" />
   </group>
     
   <!-- Nexus 1  -->
   <group ns="nexus1">
     <!-- Load robot description -->
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
-    <!-- Spawn the robot -->
-    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus1 -param robot_description -x 0 -y 0 -z 0.5" />
   </group>
 
   <!-- Nexus 2  -->
   <group ns="nexus2">
     <!-- Load robot description -->
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
-    <!-- Spawn the robot -->
-    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus2 -param robot_description -x 0 -y -1.7 -z 0.5" />
   </group>
 
   <!-- Nexus 3  -->
   <group ns="nexus3">
     <!-- Load robot description -->
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
-    <!-- Spawn the robot -->
-    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus3 -param robot_description -x 2 -y 1.7 -z 0.5" />
-  </group>
-
-  <!-- Nexus 4  -->
-  <group ns="nexus4">
-    <!-- Load robot description -->
-    <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
-    <!-- Spawn the robot -->
-    <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
-      args="-urdf -model nexus4 -param robot_description -x 2 -y -1.7 -z 0.5" />
   </group>
 
   <!-- Centralized auto node -->
@@ -91,9 +56,9 @@
   <!-- Human-In-The-Loop controller node -->
   <group ns="HuIL">
     <node name="key_teleop" pkg="first_task_formation_cbf" type="key_teleop.py" output="screen" launch-prefix="gnome-terminal --command" >
-      <param name="forward_rate" value="1"/>
-      <param name="backward_rate" value="1"/>
-      <param name="rotation_rate" value="0.5"/>
+      <param name="forward_rate" value="0.3"/>
+      <param name="backward_rate" value="0.3"/>
+      <param name="rotation_rate" value="0.3"/>
       <param name="hz" value="50"/>
     </node>
   </group>
@@ -101,12 +66,17 @@
   <!-- Logger node -->
   <group ns="Logger">
     <node name="logger" pkg="first_task_formation_cbf" type="logger.py" output="screen" >
-      <param name="show_motion" value="1"/>
-      <param name="cbf_cm_filename" value="/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/cbf_cm_log.csv"/>
-      <param name="cbf_oa_filename" value="/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/cbf_oa_log.csv"/>
-      <param name="controller_filename" value="/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/controller_log.csv"/>
-      <param name="nom_controller_filename" value="/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/nom_controller_log.csv"/>
-      <param name="huil_controller_filename" value="/home/viktornfa/catkin_ws/src/master_thesis_victor/auxiliary_code/huil_controller_log.csv"/>
+      <param name="show_motion" value="0"/>
+      <param name="cbf_cm_filename" value="/home/victor/catkin_ws/src/cbf-enabled-hil-control-mas/auxiliary_code/cbf_cm_log.csv"/>
+      <param name="cbf_oa_filename" value="/home/victor/catkin_ws/src/cbf-enabled-hil-control-mas/auxiliary_code/cbf_oa_log.csv"/>
+      <param name="cbf_arena_top_filename" value="/home/victor/catkin_ws/src/cbf-enabled-hil-control-mas/auxiliary_code/cbf_arena_top_log.csv"/>
+      <param name="cbf_arena_right_filename" value="/home/victor/catkin_ws/src/cbf-enabled-hil-control-mas/auxiliary_code/cbf_arena_right_log.csv"/>
+      <param name="cbf_arena_bottom_filename" value="/home/victor/catkin_ws/src/cbf-enabled-hil-control-mas/auxiliary_code/cbf_arena_bottom_log.csv"/>
+      <param name="cbf_arena_left_filename" value="/home/victor/catkin_ws/src/cbf-enabled-hil-control-mas/auxiliary_code/cbf_arena_left_log.csv"/>
+      <param name="cbf_obstacle_filename" value="/home/victor/catkin_ws/src/cbf-enabled-hil-control-mas/auxiliary_code/cbf_obstacle_log.csv"/>
+      <param name="controller_filename" value="/home/victor/catkin_ws/src/cbf-enabled-hil-control-mas/auxiliary_code/controller_log.csv"/>
+      <param name="nom_controller_filename" value="/home/victor/catkin_ws/src/cbf-enabled-hil-control-mas/auxiliary_code/nom_controller_log.csv"/>
+      <param name="huil_controller_filename" value="/home/victor/catkin_ws/src/cbf-enabled-hil-control-mas/auxiliary_code/huil_controller_log.csv"/>
     </node>
   </group>
 

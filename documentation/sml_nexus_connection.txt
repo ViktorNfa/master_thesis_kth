@@ -7,4 +7,4 @@ nexus4 - IP:12.0.4.6 - ssh with nexus
 pwd: SML4admin.
 
 
-Arena: 4x5.1m
+Arena: 4.5x5.8m

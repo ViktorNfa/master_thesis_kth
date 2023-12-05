@@ -28,10 +28,9 @@ from tf.transformations import euler_from_quaternion
 from std_msgs.msg import Float64
 
 import numpy as np
-from scipy.optimize import minimize, LinearConstraint
 
 
-class KCBFHuIL():
+class KCBFHuILDist():
     #=====================================
     #         Class constructor
     #  Initializes node and subscribers
@@ -41,23 +40,22 @@ class KCBFHuIL():
         # Initialisation 
         #----------------
         #Initialize node
-        rospy.init_node('k_cbf_guil')
+        rospy.init_node('k_cbf_huil_dist')
 
         #Get the robots number from parameters
         robots_number = rospy.get_param('/robots_number')
         number_robots = len(robots_number)
 
         # Create safety constraint for arena
-        As = np.array([[-1, 0], [1, 0], [0, -1], [0, 1]])
-        A_arena = np.zeros((number_robots*4, number_robots*2))
-        for i in range(number_robots):
-            A_arena[4*i:4*i+4, 2*i:2*i+2] = As
-        b_arena = np.zeros((number_robots*4))
-        xmax = 1.9
-        xmin = -1.9
-        ymax = 2
-        ymin = -2.9
-
+        xmax = 1.6
+        xmin = -1.7
+        ymax = 2.0
+        ymin = -2.3
+        #Arena walls (defined as a rectangle clockwise starting from the top) 
+        #Defined as [wall size, axis(1 is y, 0 is x), direction(1 is positive, -1 neg)]
+        walls = [[ymax, 1, 1], [xmax, 0, 1], [ymin, 1, -1], [xmin, 0, -1]]
+        wall_grad = np.transpose(np.array([[0, -1], [-1, 0], [0, 1], [1, 0]]))
+        
         #Get neighbour numbers from parameters
         neighbours = rospy.get_param('/neighbours')
         number_neighbours = []
@@ -80,39 +78,64 @@ class KCBFHuIL():
 
         #Get the ideal positions of the formation
         formation_positions = rospy.get_param('/formation_positions')
-        p_d = np.array(formation_positions)
+        x_d = np.array(formation_positions)
 
         #Get parameter representing communication maintenance and/or collision avoidance
-        cbf_cm = rospy.get_param('/cbf_cm')
-        cbf_oa = rospy.get_param('/cbf_oa')
+        cm = rospy.get_param('/cm')
+        oa = rospy.get_param('/oa')
+        arena = rospy.get_param('/arena')
+        obstacle = rospy.get_param('/obstacle')
+        extra = rospy.get_param('/extra')
 
         #Maximum/minimum safe distance for CBF
-        safe_distance_cm = rospy.get_param('/safe_distance_cm')
-        safe_distance_oa = rospy.get_param('/safe_distance_oa')
-        if safe_distance_oa < 2*0.27:
-            safe_distance_oa = 2*0.27
+        d_cm = rospy.get_param('/d_cm')
+        d_oa = rospy.get_param('/d_oa')
+        d_obstacle = rospy.get_param('/d_obstacle')
+        d_extra = rospy.get_param('/d_extra')
+        #if d_oa < 2*0.27:
+        #    d_oa = 2*0.27
+        #if d_oa < 0.27:
+        #    d_oa = 0.27
 
         #See if HuIL controller is activated and which robot it affects
         huil = rospy.get_param('/huil')
         human_robot = rospy.get_param('/human_robot')
 
         #Dimension of the problem
-        n = 2
+        dim = 2
 
         #Controller gains (for x, y, heading)
-        gains = (1, 1, 1)
+        gains = (2.0, 2.0, 2.0)
 
         #CBF constraint parameters
-        alfa = 1
+        alpha = 100
 
         #Exponential parameter
-        pp = 1
+        p = 10
 
         #Adaptative law parameter
-        k0 = 1
+        k0 = 20
 
-        #Initialize slack variable
-        y = np.zeros((number_robots,1))
+        #Maximum value of control input
+        u_max = 0.05
+        u_min = -u_max
+
+        #Parameter for the sign filter
+        filter_param = 5
+
+        #Obstacle point
+        obstacle_x = np.array([-0.13, -0.14])
+
+        #Calculate the number of total constraints
+        num_constraints = cm*len(edges)+oa*len(edges)+arena*len(walls)*number_robots+extra*number_robots+obstacle*number_robots
+        if num_constraints == 0:
+            num_constraints = 1
+
+        #Initialize auxiliary variables
+        y = np.zeros((number_robots, 1))
+        c = np.zeros((number_robots, 1))
+        # Create a counter for the times a=0 error happen
+        a_counter = np.zeros((number_robots,1))
 
         #Init robot pose
         self.robot_pose = []
@@ -148,24 +171,39 @@ class KCBFHuIL():
             vel_pub.append(rospy.Publisher("/nexus"+str(robots_number[i]-1)+"/cmd_vel", geometry_msgs.msg.Twist, queue_size=100))
 
         #Setup cbf functions publisher
-        #cbf_cm_pub = []
-        #cbf_oa_pub = []
-        #for i in range(len(edges)):
-        #    cbf_cm_pub.append(rospy.Publisher("/cbf_function_cm"+"/".join(map(str,edges[i])), Float64, queue_size=100))
-        #    cbf_oa_pub.append(rospy.Publisher("/cbf_function_oa"+"/".join(map(str,edges[i])), Float64, queue_size=100))
+        cbf_cm_pub = []
+        cbf_oa_pub = []
+        for i in range(len(edges)):
+            cbf_cm_pub.append(rospy.Publisher("/cbf_function_cm"+"/".join(map(str,edges[i])), Float64, queue_size=100))
+            cbf_oa_pub.append(rospy.Publisher("/cbf_function_oa"+"/".join(map(str,edges[i])), Float64, queue_size=100))
         #Setup message type
-        #cbf_cm_msg = Float64()
-        #cbf_oa_msg = Float64()
+        cbf_cm_msg = Float64()
+        cbf_oa_msg = Float64()
 
-        #Setup controller output publisher and message
-        #nom_controller_pub = []
-        #controller_pub = []
-        #for i in range(number_robots):
-        #    nom_controller_pub.append(rospy.Publisher("/nom_controller"+str(i+1), geometry_msgs.msg.Vector3, queue_size=100))
-        #    controller_pub.append(rospy.Publisher("/controller"+str(i+1), geometry_msgs.msg.Vector3, queue_size=100))
+        #Setup cbf arena and obstacle, controller output publishers and messages
+        nom_controller_pub = []
+        controller_pub = []
+        cbf_arena_top_pub = []
+        cbf_arena_right_pub = []
+        cbf_arena_bottom_pub = []
+        cbf_arena_left_pub = []
+        cbf_obstacle_pub = []
+        for i in range(number_robots):
+            nom_controller_pub.append(rospy.Publisher("/nom_controller"+str(i+1), geometry_msgs.msg.Vector3, queue_size=100))
+            controller_pub.append(rospy.Publisher("/controller"+str(i+1), geometry_msgs.msg.Vector3, queue_size=100))
+            cbf_arena_top_pub.append(rospy.Publisher("/cbf_function_arena_top"+str(i+1), Float64, queue_size=100))
+            cbf_arena_right_pub.append(rospy.Publisher("/cbf_function_arena_right"+str(i+1), Float64, queue_size=100))
+            cbf_arena_bottom_pub.append(rospy.Publisher("/cbf_function_arena_bottom"+str(i+1), Float64, queue_size=100))
+            cbf_arena_left_pub.append(rospy.Publisher("/cbf_function_arena_left"+str(i+1), Float64, queue_size=100))
+            cbf_obstacle_pub.append(rospy.Publisher("/cbf_function_obstacle"+str(i+1), Float64, queue_size=100))
         #Setup message type
-        #nom_controller_msg = geometry_msgs.msg.Vector3()
-        #controller_msg = geometry_msgs.msg.Vector3()
+        nom_controller_msg = geometry_msgs.msg.Vector3()
+        controller_msg = geometry_msgs.msg.Vector3()
+        cbf_arena_top_msg = Float64()
+        cbf_arena_right_msg = Float64()
+        cbf_arena_bottom_msg = Float64()
+        cbf_arena_left_msg = Float64()
+        cbf_obstacle_msg = Float64()
 
         #Setup transform subscriber
         tf_buffer = []
@@ -188,15 +226,15 @@ class KCBFHuIL():
         # Loop at set frequency and publish position command if necessary
         #-----------------------------------------------------------------
         #Loop frequency in Hz
-        loop_frequency = 1000
+        loop_frequency = 50
         r = rospy.Rate(loop_frequency)
 
-        rospy.sleep(4)
+        rospy.sleep(1)
 
         rospy.loginfo("CBF-Formation controller Distributed Initialized for nexus"+str(robots_number)+
                       " with neighbours "+str(neighbours)+" with ideal positions "+str(formation_positions)+
-                      " and CBF comunication maintenance "+str(cbf_cm)+" with distance "+str(safe_distance_cm)+
-                      " and obstacle avoidance "+str(cbf_oa)+" with distance "+str(safe_distance_oa)
+                      " and CBF comunication maintenance "+str(cm)+" with distance "+str(d_cm)+
+                      " and obstacle avoidance "+str(oa)+" with distance "+str(d_oa)
                       )
 
         while not rospy.is_shutdown():
@@ -210,12 +248,12 @@ class KCBFHuIL():
                 #---------------------------------------
                 # Get position and orientation matrices
                 #---------------------------------------
-                p = np.zeros((number_robots, 2))
+                x = np.zeros((number_robots, 2))
                 heading = np.zeros((number_robots))
                 for i in range(number_robots):
                     #Get x and y position from robot pose
-                    p[i, 0] = self.robot_pose[i].pose.position.x
-                    p[i, 1] = self.robot_pose[i].pose.position.y
+                    x[i, 0] = self.robot_pose[i].pose.position.x
+                    x[i, 1] = self.robot_pose[i].pose.position.y
 
                     #Get euler angle from robot pose quaternion
                     (roll, pitch, yaw) = euler_from_quaternion([self.robot_pose[i].pose.orientation.x,
@@ -224,7 +262,7 @@ class KCBFHuIL():
                                                                 self.robot_pose[i].pose.orientation.w])
                     heading[i] = yaw
 
-                dist_p = p - p_d
+                dist_p = x - x_d
 
                 #------------------------------------
                 # Compute nominal (auto) controllers
@@ -236,7 +274,7 @@ class KCBFHuIL():
                 u_nom_heading = -heading
 
                 #Convert nominal controller to CBF controller format and add HuIL
-                u_n = np.zeros((number_robots*n))
+                u_n = np.zeros((number_robots*dim))
                 for i in range(number_robots):
                     #For the robot controlled with HuIL
                     if i == human_robot-1:
@@ -247,85 +285,95 @@ class KCBFHuIL():
                         u_n[2*i+1] = u_nom[i, 1]
 
                     #Publish nominal controller
-                    #nom_controller_msg.x = u_n[2*i]
-                    #nom_controller_msg.y = u_n[2*i+1]
-                    #nom_controller_pub[i].publish(nom_controller_msg)
+                    nom_controller_msg.x = u_n[2*i]
+                    nom_controller_msg.y = u_n[2*i+1]
+                    nom_controller_pub[i].publish(nom_controller_msg)
 
-                #Create CBF constraint matrices
-                #A_cm = np.zeros((len(edges), number_robots*n))
-                #b_cm = np.zeros((len(edges)))
-                #A_oa = np.zeros((len(edges), number_robots*n))
-                #b_oa = np.zeros((len(edges)))
-                u = np.zeros((n*number_robots, 1))
+                #Compute CBF constrained controller - Distributed
+                u = np.zeros((dim*number_robots, 1))
                 c = np.zeros((number_robots, 1))
-                a = np.zeros((n*number_robots, 1))
+                a = np.zeros((dim*number_robots, 1))
                 b = np.zeros((number_robots, 1))
                 for i in range(number_robots):
+
+                    # Collective constraints
                     for e in range(len(edges)):
                         aux_i = edges[e][0]-1
                         aux_j = edges[e][1]-1
 
                         if i == aux_i:
-                            a[2*i:2*i+2] += -pp*np.exp(-pp*self.cbf_h(p[aux_i], p[aux_j], safe_distance_cm, 1))*self.cbf_gradh(p[aux_i], p[aux_j], 1)
-                            b[i] += -alfa/2*(1/len(edges)-np.exp(-pp*self.cbf_h(p[aux_i], p[aux_j], safe_distance_cm, 1)))
+                            # CM
+                            a[2*i:2*i+2] += cm*np.nan_to_num(-p*np.exp(-p*self.cbf_h(x[aux_i], x[aux_j], d_cm, 1))*self.cbf_gradh(x[aux_i], x[aux_j], 1))
+                            b[i] += cm*np.nan_to_num(-alpha/2*(1/num_constraints-np.exp(-p*self.cbf_h(x[aux_i], x[aux_j], d_cm, 1))))
+                            # OA
+                            a[2*i:2*i+2] += oa*np.nan_to_num(-p*np.exp(-p*self.cbf_h(x[aux_i], x[aux_j], d_oa, -1))*self.cbf_gradh(x[aux_i], x[aux_j], -1))
+                            b[i] += oa*np.nan_to_num(-alpha/2*(1/num_constraints-np.exp(-p*self.cbf_h(x[aux_i], x[aux_j], d_oa, -1))))
                         elif i == aux_j:
-                            a[2*i:2*i+2] += -pp*np.exp(-pp*self.cbf_h(p[aux_i], p[aux_j], safe_distance_cm, 1))*self.cbf_gradh(p[aux_i], p[aux_j], 1)
-                            b[i] += -alfa/2*(1/len(edges)-np.exp(-pp*self.cbf_h(p[aux_i], p[aux_j], safe_distance_cm, 1)))
+                            # CM
+                            a[2*i:2*i+2] += cm*np.nan_to_num(-p*np.exp(-p*self.cbf_h(x[aux_i], x[aux_j], d_cm, 1))*self.cbf_gradh(x[aux_j], x[aux_i], 1))
+                            b[i] += cm*np.nan_to_num(-alpha/2*(1/num_constraints-np.exp(-p*self.cbf_h(x[aux_i], x[aux_j], d_cm, 1))))
+                            # OA
+                            a[2*i:2*i+2] += oa*np.nan_to_num(-p*np.exp(-p*self.cbf_h(x[aux_i], x[aux_j], d_oa, -1))*self.cbf_gradh(x[aux_j], x[aux_i], -1))
+                            b[i] += oa*np.nan_to_num(-alpha/2*(1/num_constraints-np.exp(-p*self.cbf_h(x[aux_i], x[aux_j], d_oa, -1))))
                         else:
-                            a[2*i:2*i+2] += np.zeros((n, 1))
+                            a[2*i:2*i+2] += np.zeros((dim, 1))
                             b[i] += 0
 
-                        #b_cm[e] = alfa*self.cbf_h(p[aux_i], p[aux_j], safe_distance_cm, 1)
-                        #b_oa[e] = alfa*self.cbf_h(p[aux_i], p[aux_j], safe_distance_oa, -1)
-                        #Publish cbf function message
-                        #cbf_cm_msg = b_cm[e]
-                        #cbf_oa_msg = b_oa[e]
-                        #cbf_cm_pub[e].publish(cbf_cm_msg)
-                        #cbf_oa_pub[e].publish(cbf_oa_msg)
+                    # Individual constraints
+                    for k in range(len(walls)):
+                        # Arena walls
+                        a[2*i:2*i+2] += arena*np.nan_to_num(-p*np.exp(-p*self.cbf_walls(x[i], walls[k]))*wall_grad[:,k].reshape(2, 1))
+                        b[i] += arena*np.nan_to_num(-alpha*(1/num_constraints-np.exp(-p*self.cbf_walls(x[i], walls[k]))))
+                    # Mid-point obstacle
+                    a[2*i:2*i+2] += obstacle*np.nan_to_num(-p*np.exp(-p*self.cbf_h(x[i], obstacle_x, d_obstacle, -1))*self.cbf_gradh(x[i], obstacle_x, -1))
+                    b[i] += obstacle*np.nan_to_num(-alpha*(1/num_constraints-np.exp(-p*self.cbf_h(x[i], obstacle_x, d_obstacle, -1))))
+                    # Extra robot avoidance
+                    #a[2*i:2*i+2] += extra*np.nan_to_num(-p*np.exp(-p*self.cbf_h(x[i], huil_x, d_extra, -1))*self.cbf_gradh(x[i], huil_x, -1))
+                    #b[i] += extra*np.nan_to_num(-alpha*(1/num_constraints-np.exp(-p*self.cbf_h(x[i], huil_x, d_extra, -1))) -
+                    #    p*np.exp(-p*self.cbf_h(x[i], huil_x, d_extra, -1))*np.dot(np.transpose(self.cbf_gradh(huil_x, x[i], -1)),np.array([vxe,vye])))
 
-                        #grad_h_value_cm = np.transpose(self.cbf_gradh(p[aux_i], p[aux_j], 1))
-                        #grad_h_value_oa = np.transpose(self.cbf_gradh(p[aux_i], p[aux_j], -1))
+                    #Publish cbf arena and obstacle function message
+                    cbf_arena_top_msg = self.cbf_walls(x[i], walls[0])
+                    cbf_arena_right_msg = self.cbf_walls(x[i], walls[1])
+                    cbf_arena_bottom_msg = self.cbf_walls(x[i], walls[2])
+                    cbf_arena_left_msg = self.cbf_walls(x[i], walls[3])
+                    cbf_obstacle_msg = self.cbf_h(x[i], obstacle_x, d_obstacle, -1)
+                    cbf_arena_top_pub[i].publish(cbf_arena_top_msg)
+                    cbf_arena_right_pub[i].publish(cbf_arena_right_msg)
+                    cbf_arena_bottom_pub[i].publish(cbf_arena_bottom_msg)
+                    cbf_arena_left_pub[i].publish(cbf_arena_left_msg)
+                    cbf_obstacle_pub[i].publish(cbf_obstacle_msg)
 
-                        #A_cm[e, 2*aux_i:2*aux_i+2] = grad_h_value_cm
-                        #A_cm[e, 2*aux_j:2*aux_j+2] = -grad_h_value_cm
-                        #A_oa[e, 2*aux_i:2*aux_i+2] = grad_h_value_oa
-                        #A_oa[e, 2*aux_j:2*aux_j+2] = -grad_h_value_oa
-                    
-                    c[i] = (np.dot(L_G[i,:],y)+np.dot(np.transpose(a[2*i:2*i+2]),u_n[2*i:2*i+2])+b[i])/np.dot(np.transpose(a[2*i:2*i+2]),a[2*i:2*i+2])
-                    u[2*i:2*i+2] = np.expand_dims(u_n[2*i:2*i+2], axis=1) - np.maximum(0,c[i])*a[2*i:2*i+2]
+                    u[2*i:2*i+2] = np.expand_dims(u_n[2*i:2*i+2], axis=1)
+                    if a[2*i] == 0 and a[2*i+1] == 0:
+                        a_counter[i] += 1
+                    else:
+                        c[i] = (np.dot(L_G[i,:],y) + 
+                            np.dot(np.transpose(a[2*i:2*i+2]),u_n[2*i:2*i+2])+b[i])/np.dot(np.transpose(a[2*i:2*i+2]),a[2*i:2*i+2])
+                        u[2*i:2*i+2] -=  np.maximum(0,c[i])*a[2*i:2*i+2]
 
-                #u = u_nom
                 u = np.squeeze(u, axis=1)
-
+                
                 # Update slack variable
-                y = y - k0*np.sign(np.dot(L_G,c))*(1/loop_frequency)
+                for i in range(number_robots):
+                    if a[2*i] == 0 and a[2*i+1] == 0:
+                        y[i] = 0
+                    else:
+                        y[i] = y[i] - np.transpose(k0*self.sign_filter(np.dot(L_G[i,:],c), filter_param))*(1/loop_frequency)
 
-                #Calculate CBF for arena safety
-                #for i in range(number_robots):
-                #    b_arena[4*i] = alfa*(xmax - p[i, 0])
-                #    b_arena[4*i+1] = alfa*(p[i, 0] - xmin)
-                #    b_arena[4*i+2] = alfa*(ymax - p[i, 1])
-                #    b_arena[4*i+3] = alfa*(p[i, 1] - ymin)
+                #Publish cbf CM and OA function message
+                for e in range(len(edges)):
+                    aux_i = edges[e][0]-1
+                    aux_j = edges[e][1]-1
+            
+                    cbf_cm_msg = self.cbf_h(x[aux_i], x[aux_j], d_cm, 1)
+                    cbf_oa_msg = self.cbf_h(x[aux_i], x[aux_j], d_oa, -1)
+                    cbf_cm_pub[e].publish(cbf_cm_msg)
+                    cbf_oa_pub[e].publish(cbf_oa_msg)
 
-                #----------------------------
-                # Solve minimization problem
-                #----------------------------
-                #Define linear constraints
-                #constraint_cm = LinearConstraint(A_cm*cbf_cm, lb=-b_cm*cbf_cm, ub=np.inf)
-                #constraint_oa = LinearConstraint(A_oa*cbf_oa, lb=-b_oa*cbf_oa, ub=np.inf)
-                #constraint_arena = LinearConstraint(A_arena, lb=-b_arena, ub=np.inf)
-                
-                #Define objective function
-                #def objective_function(u, u_n):
-                #    return np.linalg.norm(u - u_n)**2
-                
-                #Construct the problem
-                #u = minimize(
-                #    objective_function,
-                #    x0=u_n,
-                #    args=(u_n,),
-                #    constraints=[constraint_cm, constraint_oa, constraint_arena],
-                #)
+                # Bound the control input
+                for i in range(len(u)):
+                    u[i] = max(u_min, min(u_max, u[i]))
 
                 #-------------
                 # Send output
@@ -336,9 +384,9 @@ class KCBFHuIL():
                     vel_cmd_msg[i].angular.z = u_nom_heading[i] * gains[2]
 
                     #Publish controller output
-                    #controller_msg.x = u.x[2*i]
-                    #controller_msg.y = u.x[2*i+1]
-                    #controller_pub[i].publish(controller_msg)
+                    controller_msg.x = u[2*i]
+                    controller_msg.y = u[2*i+1]
+                    controller_pub[i].publish(controller_msg)
 
             #Else stop robot
             else:
@@ -390,6 +438,7 @@ class KCBFHuIL():
     #=====================================
     #        Function to calculate 
     #       the CBF safety function
+    #           for CM and OA
     #=====================================
     def cbf_h(self, p_i, p_j, safe_distance, dir):
         # Dir 1 corresponds to CM and -1 to OA
@@ -398,10 +447,33 @@ class KCBFHuIL():
     #=====================================
     #  Function to calculate the gradient 
     #     of the CBF safety function
+    #           for CM and OA
     #=====================================
     def cbf_gradh(self, p_i, p_j, dir):
         # Dir 1 corresponds to CM and -1 to OA
         return dir*(-2*np.array([[p_i[0]-p_j[0]], [p_i[1]-p_j[1]]]))
+
+    #=====================================
+    #        Function to calculate 
+    #       the CBF safety function
+    #          for arena limits
+    #=====================================
+    def cbf_walls(self, p, wall):
+        return wall[2]*(wall[0]-p[wall[1]])
+
+    #=====================================
+    #        Function to filter
+    #        the sign operator
+    #=====================================
+    def sign_filter(self, x, a):
+        if x >= a:
+            sol = 1
+        elif x <= a:
+            sol = -1
+        else:
+            sol = 1/a*x
+
+        return sol
 
 
 #=====================================
@@ -432,7 +504,7 @@ def transform_twist(twist= geometry_msgs.msg.Twist, transform_stamped = geometry
 #               Main
 #=====================================
 if __name__ == "__main__":
-    k3_cbf_huil = KCBFHuIL()
+    k_cbf_huil_dist = KCBFHuILDist()
     try:
         rospy.spin()
     except ValueError as e:

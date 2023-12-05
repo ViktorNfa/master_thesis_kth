@@ -9,19 +9,20 @@
   <!-- List of neighbours for each robot-->
   <rosparam param="neighbours">[[2, 3], [1, 4], [1, 4], [2, 3]]</rosparam>
 
-  <!-- CBF Communication maintenance or obstacle avoidance activation (1 is activated/0 is deactivated) -->
-  <param name="cbf_cm" value="1"/>
-  <param name="cbf_oa" value="1"/>
+  <!-- CBF Communication maintenance, obstacle avoidance, arena, obstacle and extra human activation (1 is activated/0 is deactivated) -->
+  <param name="cm" value="1"/>
+  <param name="oa" value="1"/>
+  <param name="arena" value="1"/>
+  <param name="obstacle" value="1"/>
   <param name="extra" value="1"/>
 
-  <!-- Safe distance for communication maintenance and obstacle avoidance (as well as extra-HuIL OA) -->
-  <param name="safe_distance_cm" value="1.0"/>
-  <param name="safe_distance_oa" value="0.5"/>
-  <param name="safe_distance_obstacle" value="0.5"/>
-  <param name="safe_distance_extra" value="0.5"/>
+  <!-- Safe distance for communication maintenance, obstacle avoidance, obstacle and extra human -->
+  <param name="d_cm" value="0.9"/>
+  <param name="d_oa" value="0.3"/>
+  <param name="d_obstacle" value="0.35"/>
+  <param name="d_extra" value="1.0"/>
 
   <!-- Variable to determine if HuIL is active or not (1 is activated/0 is deactivated) as well as the robot it affects -->
-  <!-- Additionally the HuIL robot will be also the extra one -->
   <param name="huil" value="1"/>
   <param name="human_robot" value="5"/>
 
@@ -49,13 +50,13 @@
     <include file="$(find sml_nexus_description)/launch/sml_nexus_description.launch" />
   </group>
 
-  <!-- Centralized auto node -->
+  <!-- Distributed auto node -->
   <group ns="Auto">
-    <node name="k_cbf_extra_huil" pkg="first_task_formation_cbf" type="k_cbf_extra_huil.py" output="screen" >
+    <node name="k_cbf_extra_huil_dist" pkg="first_task_formation_cbf" type="k_cbf_extra_huil_dist.py" output="screen" >
     </node>
   </group>
 
-  <!-- Logger node -->
+    <!-- Logger node -->
   <group ns="Logger">
     <node name="logger" pkg="first_task_formation_cbf" type="logger.py" output="screen" >
       <param name="show_motion" value="0"/>
