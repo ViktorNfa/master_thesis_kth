@@ -1,11 +1,11 @@
 # Master Thesis by Victor Nan Fernandez-Ayala (vnfa@kth.se)
-Done as part of my MSc in Aerospace Engineering at KTH Royal Institute of Technology
+Done as part of my MSc in Aerospace Engineering at KTH Royal Institute of Technology.
 
 # Control barrier function-enabled human-in-the-loop control for multi-robot systems
 Supervised by [Xiao Tan](https://scholar.google.com/citations?user=opvXnUYAAAAJ&hl=en).
 
 ## Installation
-Clone the repository in your desired directory with 
+Clone the repository in your desired directory with:
 
 `git clone https://github.com/ViktorNfa/master_thesis_kth.git`
 
